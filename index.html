@@ -16,77 +16,226 @@
         </div>
 
         <div class="nav-group">
-            <div class="nav-title">Schedule</div>
-            <a href="#" class="nav-item active"><i data-lucide="calendar"></i> Calendar</a>
-            <a href="#" class="nav-item"><i data-lucide="video"></i> Video consultations</a>
+            <div class="nav-title">Timeplan</div>
+            <a href="#" class="nav-item active" onclick="showSection('calendar'); return false;"><i data-lucide="calendar"></i> Kalender</a>
+            <a href="#" class="nav-item" onclick="showSection('video-consultations'); return false;"><i data-lucide="video"></i> Videokonsultasjoner</a>
         </div>
 
         <div class="nav-group">
-            <div class="nav-title">My Account</div>
-            <a href="#" class="nav-item"><i data-lucide="user"></i> User</a>
-            <a href="#" class="nav-item"><i data-lucide="briefcase"></i> Practitioner</a>
-            <a href="#" class="nav-item"><i data-lucide="bell"></i> Notification settings</a>
+            <div class="nav-title">Min konto</div>
+            <a href="#" class="nav-item" onclick="showSection('user-settings'); return false;"><i data-lucide="user"></i> Bruker</a>
+            <a href="#" class="nav-item" onclick="showSection('practitioner-settings'); return false;"><i data-lucide="briefcase"></i> Behandlere</a>
+            <a href="#" class="nav-item" onclick="showSection('notification-settings'); return false;"><i data-lucide="bell"></i> Varslinger</a>
         </div>
 
         <div class="user-footer">
             <div class="avatar"><img src="https://i.pravatar.cc/150?u=sander" alt="User"></div>
             <div class="user-details">
-                <h4>Sander Rosøy</h4>
+                <h4 id="userName">Sander Rosøy</h4>
                 <p>sander.rosoy@drdropin.no</p>
             </div>
-            <i data-lucide="chevrons-up-down" size="16" style="margin-left:auto; color:var(--text-muted)"></i>
+            <button onclick="logout()" style="margin-left:auto; background:none; border:none; cursor:pointer; padding:4px;" title="Logg ut">
+                <i data-lucide="log-out" size="16" style="color:var(--text-muted)"></i>
+            </button>
         </div>
     </nav>
 
     <main class="main">
-        <header>
-            <div class="top-bar">
-                <div class="location-pill">
-                    <i data-lucide="map-pin" size="14"></i>
-                    Berstadhuset: Valkendorfsgaten
-                </div>
-            </div>
-
-            <div class="action-bar">
-                <div style="display:flex; align-items:center;">
-                    <div class="view-toggles">
-                        <button class="toggle-btn">Day</button>
-                        <button class="toggle-btn active">Week</button>
-                    </div>
-                    <div class="date-nav">
-                        <button class="nav-btn" onclick="changeWeek(-1)"><i data-lucide="chevron-left" size="16"></i></button>
-                        <span class="current-date-range">24.11 - 30.11 Nov 2025</span>
-                        <button class="nav-btn" onclick="changeWeek(1)"><i data-lucide="chevron-right" size="16"></i></button>
-                        <button class="outline-btn" onclick="goToToday()">Today</button>
+        <!-- CALENDAR SECTION -->
+        <div id="section-calendar" class="content-section active">
+            <header>
+                <div class="top-bar">
+                    <div class="location-pill">
+                        <i data-lucide="map-pin" size="14"></i>
+                        Berstadhuset: Valkendorfsgaten
                     </div>
                 </div>
 
-                <div style="display:flex; gap:10px;">
-                    <div class="practitioner-select-wrapper" style="position:relative;">
-                        <i data-lucide="users" size="14" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); pointer-events:none; z-index:1;"></i>
-                        <select id="practitionerSelect" class="outline-btn" style="padding-left: 30px; appearance: none; cursor: pointer;" onchange="fetchAppointments()">
-                            <option value="all">Alle behandlere</option>
-                        </select>
+                <div class="action-bar">
+                    <div style="display:flex; align-items:center;">
+                        <div class="view-toggles">
+                            <button class="toggle-btn" onclick="setView('day')">Dag</button>
+                            <button class="toggle-btn active" onclick="setView('week')">Uke</button>
+                        </div>
+                        <div class="date-nav">
+                            <button class="nav-btn" onclick="changeWeek(-1)"><i data-lucide="chevron-left" size="16"></i></button>
+                            <span class="current-date-range">24.11 - 30.11 Nov 2025</span>
+                            <button class="nav-btn" onclick="changeWeek(1)"><i data-lucide="chevron-right" size="16"></i></button>
+                            <button class="outline-btn" onclick="goToToday()">I dag</button>
+                        </div>
                     </div>
-                    <button class="outline-btn" onclick="toggleSettings(true)"><i data-lucide="settings" size="14"></i> Settings</button>
+
+                    <div style="display:flex; gap:10px;">
+                        <div class="practitioner-select-wrapper" style="position:relative;">
+                            <i data-lucide="users" size="14" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); pointer-events:none; z-index:1;"></i>
+                            <select id="practitionerSelect" class="outline-btn" style="padding-left: 30px; appearance: none; cursor: pointer;" onchange="fetchAppointments()">
+                                <option value="all">Alle behandlere</option>
+                            </select>
+                        </div>
+                        <button class="outline-btn" onclick="toggleSettings(true)"><i data-lucide="settings" size="14"></i> Innstillinger</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="calendar-container">
+                <div class="grid-header">
+                    <div class="header-cell" style="border-bottom:none"></div>
+                    <div class="header-cell">Man <span class="day-num">24</span></div>
+                    <div class="header-cell">Tir <span class="day-num">25</span></div>
+                    <div class="header-cell active">Ons <span class="day-num">26</span></div>
+                    <div class="header-cell">Tor <span class="day-num">27</span></div>
+                    <div class="header-cell">Fre <span class="day-num">28</span></div>
+                    <div class="header-cell">Lør <span class="day-num">29</span></div>
+                    <div class="header-cell">Søn <span class="day-num">30</span></div>
+                </div>
+
+                <div class="grid-body" id="gridBody">
+                    <div class="time-col" id="timeLabels"></div>
                 </div>
             </div>
-        </header>
+        </div>
 
-        <div class="calendar-container">
-            <div class="grid-header">
-                <div class="header-cell" style="border-bottom:none"></div>
-                <div class="header-cell">Mon <span class="day-num">24</span></div>
-                <div class="header-cell">Tue <span class="day-num">25</span></div>
-                <div class="header-cell active">Wed <span class="day-num">26</span></div>
-                <div class="header-cell">Thu <span class="day-num">27</span></div>
-                <div class="header-cell">Fri <span class="day-num">28</span></div>
-                <div class="header-cell">Sat <span class="day-num">29</span></div>
-                <div class="header-cell">Sun <span class="day-num">30</span></div>
+        <!-- VIDEO CONSULTATIONS SECTION -->
+        <div id="section-video-consultations" class="content-section">
+            <header>
+                <div class="top-bar">
+                    <h2 style="margin: 0; font-size: 24px; color: var(--text-dark);">Videokonsultasjoner</h2>
+                </div>
+            </header>
+
+            <div style="padding: 24px;">
+                <div class="info-card">
+                    <i data-lucide="info" size="20"></i>
+                    <p>Her vises alle kommende og gjennomførte videokonsultasjoner. Du kan også starte nye videomøter direkte fra kalenderen ved å opprette en avtale av typen "Videokonsultasjon".</p>
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <h3 style="margin-bottom: 16px; color: var(--text-dark);">Kommende videokonsultasjoner</h3>
+                    <div id="upcomingVideoConsultations"></div>
+                </div>
             </div>
+        </div>
 
-            <div class="grid-body" id="gridBody">
-                <div class="time-col" id="timeLabels"></div>
+        <!-- USER SETTINGS SECTION -->
+        <div id="section-user-settings" class="content-section">
+            <header>
+                <div class="top-bar">
+                    <h2 style="margin: 0; font-size: 24px; color: var(--text-dark);">Brukerinnstillinger</h2>
+                </div>
+            </header>
+
+            <div style="padding: 24px; max-width: 600px;">
+                <div class="settings-section">
+                    <h3>Profilinformasjon</h3>
+                    <div class="form-group">
+                        <label>Navn</label>
+                        <input type="text" id="userNameSetting" class="form-input" placeholder="Fullt navn">
+                    </div>
+                    <div class="form-group">
+                        <label>E-post</label>
+                        <input type="email" id="userEmailSetting" class="form-input" placeholder="din@epost.no" readonly style="background: #f4f5f7;">
+                    </div>
+                    <div class="form-group">
+                        <label>Telefon</label>
+                        <input type="tel" id="userPhoneSetting" class="form-input" placeholder="+47 123 45 678">
+                    </div>
+                    <button class="btn-primary" onclick="saveUserSettings()">Lagre endringer</button>
+                </div>
+
+                <div class="settings-section" style="margin-top: 32px;">
+                    <h3>Endre passord</h3>
+                    <div class="form-group">
+                        <label>Nåværende passord</label>
+                        <input type="password" id="currentPassword" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Nytt passord</label>
+                        <input type="password" id="newPassword" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Bekreft nytt passord</label>
+                        <input type="password" id="confirmPassword" class="form-input">
+                    </div>
+                    <button class="btn-secondary" onclick="changePassword()">Endre passord</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRACTITIONER SETTINGS SECTION -->
+        <div id="section-practitioner-settings" class="content-section">
+            <header>
+                <div class="top-bar">
+                    <h2 style="margin: 0; font-size: 24px; color: var(--text-dark);">Behandlerinnstillinger</h2>
+                </div>
+            </header>
+
+            <div style="padding: 24px;">
+                <div style="margin-bottom: 24px;">
+                    <button class="btn-primary" onclick="openAddPractitionerModal()"><i data-lucide="plus" size="16"></i> Legg til behandler</button>
+                </div>
+
+                <div class="practitioners-grid" id="practitionersGrid"></div>
+            </div>
+        </div>
+
+        <!-- NOTIFICATION SETTINGS SECTION -->
+        <div id="section-notification-settings" class="content-section">
+            <header>
+                <div class="top-bar">
+                    <h2 style="margin: 0; font-size: 24px; color: var(--text-dark);">Varslingsinnstillinger</h2>
+                </div>
+            </header>
+
+            <div style="padding: 24px; max-width: 600px;">
+                <div class="settings-section">
+                    <h3>E-postvarsler</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="emailNewAppt" checked>
+                            <span>Send e-post ved nye avtaler</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="emailCancelled" checked>
+                            <span>Send e-post ved kansellerte avtaler</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="emailReminder" checked>
+                            <span>Send påminnelse 24 timer før avtale</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section" style="margin-top: 32px;">
+                    <h3>SMS-varsler</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="smsNewAppt">
+                            <span>Send SMS ved nye avtaler</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="smsReminder" checked>
+                            <span>Send SMS-påminnelse 2 timer før avtale</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section" style="margin-top: 32px;">
+                    <h3>Push-varsler</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="pushEnabled" checked>
+                            <span>Aktiver push-varsler i nettleseren</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="btn-primary" onclick="saveNotificationSettings()">Lagre innstillinger</button>
             </div>
         </div>
     </main>
@@ -124,10 +273,20 @@
             <div class="form-group">
                 <label>Type konsultasjon</label>
                 <select id="inputType" class="form-input">
-                    <option value="Psykolog i klinikk, oppfølging">Psykolog i klinikk, oppfølging</option>
-                    <option value="Psykolog i klinikk, første time">Psykolog i klinikk, første time</option>
-                    <option value="Videokonsultasjon">Videokonsultasjon</option>
+                    <option value="Psykolog i klinikk, oppfølging (50 min)">Psykolog i klinikk, oppfølging (50 min)</option>
+                    <option value="Psykolog i klinikk, første time (50 min)">Psykolog i klinikk, første time (50 min)</option>
+                    <option value="ADHD utredning førstesamtale (75 min)">ADHD utredning førstesamtale (75 min)</option>
+                    <option value="Utvidet oppfølgingssamtale (75 min)">Utvidet oppfølgingssamtale (75 min)</option>
+                    <option value="Dobbelttime (90 min)">Dobbelttime (90 min)</option>
+                    <option value="Parterapi oppfølging (90 min)">Parterapi oppfølging (90 min)</option>
+                    <option value="Videokonsultasjon (50 min)">Videokonsultasjon (50 min)</option>
+                    <option value="Kortsamtale (25 min)">Kortsamtale (25 min)</option>
                 </select>
+            </div>
+
+            <div class="form-group" id="videoLinkGroup" style="display:none;">
+                <label>Videolenke (Teams/Zoom/Whereby)</label>
+                <input type="url" id="inputVideoLink" class="form-input" placeholder="https://meet.google.com/...">
             </div>
 
             <input type="hidden" id="inputDayIndex">
@@ -160,6 +319,54 @@
 
             <div class="modal-actions">
                 <button class="btn-primary" onclick="saveSettings()">Lagre & Oppdater</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="practitionerModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="practitionerModalTitle">Legg til behandler</h3>
+                <button class="close-modal" onclick="closePractitionerModal()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="form-group">
+                <label>Navn</label>
+                <input type="text" id="practitionerName" class="form-input" placeholder="Fullt navn">
+            </div>
+
+            <div class="form-group">
+                <label>Rolle</label>
+                <select id="practitionerRole" class="form-input">
+                    <option value="Psykolog">Psykolog</option>
+                    <option value="Lege">Lege</option>
+                    <option value="Fysioterapeut">Fysioterapeut</option>
+                    <option value="Kiropraktor">Kiropraktor</option>
+                    <option value="Sykepleier">Sykepleier</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Farge (for kalendervisning)</label>
+                <input type="color" id="practitionerColor" class="form-input" value="#e6effc">
+            </div>
+
+            <div class="form-group">
+                <label>Brukernavn (for innlogging)</label>
+                <input type="text" id="practitionerUsername" class="form-input" placeholder="brukernavn">
+            </div>
+
+            <div class="form-group">
+                <label>Passord</label>
+                <input type="password" id="practitionerPassword" class="form-input" placeholder="Kun ved opprettelse/endring">
+            </div>
+
+            <input type="hidden" id="practitionerId">
+
+            <div class="modal-actions">
+                <button type="button" class="btn-danger" id="btnDeletePractitioner" style="display:none;" onclick="deletePractitioner()">Slett</button>
+                <button type="button" class="btn-secondary" onclick="closePractitionerModal()">Avbryt</button>
+                <button type="button" class="btn-primary" onclick="savePractitioner()">Lagre</button>
             </div>
         </div>
     </div>
