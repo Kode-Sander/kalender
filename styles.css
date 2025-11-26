@@ -218,7 +218,8 @@ header {
 .outline-btn {
     background: white;
     border: 1px solid var(--border);
-    padding: 8px 16px;
+    padding: 0 16px;
+    height: 36px;
     border-radius: var(--radius-sm);
     font-weight: 500;
     cursor: pointer;
@@ -229,6 +230,7 @@ header {
     color: var(--text-main);
     box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
+    line-height: 36px;
 }
 .outline-btn:hover {
     background: #f8fafc;
@@ -400,20 +402,17 @@ header {
     );
 }
 
-/* Video badge in top-right corner */
-.video-badge {
+/* Video icon in top-right corner (discreet) */
+.video-icon-small {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    color: #ff5630;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 4px;
-    padding: 2px;
-    z-index: 30;
+    top: 5px;
+    right: 5px;
+    width: 14px;
+    height: 14px;
+    color: #172b4d;
+    opacity: 0.6;
+    z-index: 5;
     pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .event-card:hover {

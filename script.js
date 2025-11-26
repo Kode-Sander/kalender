@@ -13,6 +13,12 @@ let currentView = 'week'; // 'day' or 'week'
 let isDraggingGlobal = false;
 let isResizingGlobal = false;
 
+// Work hours configuration (used for white background in calendar)
+let myWorkHours = {
+    start: parseInt(localStorage.getItem('workHoursStart')) || 8,
+    end: parseInt(localStorage.getItem('workHoursEnd')) || 16
+};
+
 // --- INITIALISERING ---
 document.addEventListener('DOMContentLoaded', async () => {
     // Sjekk autentisering først
@@ -419,8 +425,9 @@ function initGrid() {
 
         const workBg = document.createElement('div');
         workBg.className = 'working-hours-bg';
-        workBg.style.top = (8 - startHour) * hourHeight + 'px';
-        workBg.style.height = (8 * hourHeight) + 'px';
+        // Use myWorkHours for dynamic work hours
+        workBg.style.top = (myWorkHours.start - startHour) * hourHeight + 'px';
+        workBg.style.height = ((myWorkHours.end - myWorkHours.start) * hourHeight) + 'px';
         col.appendChild(workBg);
 
         for (let h = startHour; h < endHour; h++) {
@@ -541,9 +548,9 @@ function renderEvents() {
             card.style.right = 'auto';
         }
 
-        // Video-ikon i øvre høyre hjørne (UTENFOR event-inner)
+        // Video-ikon i øvre høyre hjørne (diskret, uten bakgrunn)
         const videoIcon = appt.type.includes('Videokonsultasjon')
-            ? `<div class="video-badge"><i data-lucide="video" size="14"></i></div>`
+            ? `<i data-lucide="video" class="video-icon-small"></i>`
             : '';
 
         // Sperring har spesiell visning
@@ -1472,4 +1479,51 @@ function saveNotificationSettings() {
     localStorage.setItem('pushEnabled', document.getElementById('pushEnabled').checked);
 
     alert('Varslingsinnstillinger lagret!');
+}
+
+// --- USER PROFILE / WORK HOURS ---
+function openWorkHoursModal() {
+    // Hent nåværende verdier fra myWorkHours
+    document.getElementById('userStartHour').value = myWorkHours.start;
+    document.getElementById('userEndHour').value = myWorkHours.end;
+
+    document.getElementById('userProfileModal').classList.add('open');
+    setTimeout(() => lucide.createIcons(), 10);
+}
+
+function closeUserProfile() {
+    document.getElementById('userProfileModal').classList.remove('open');
+}
+
+function saveWorkHours() {
+    const s = parseInt(document.getElementById('userStartHour').value);
+    const e = parseInt(document.getElementById('userEndHour').value);
+
+    if (s >= e) {
+        alert("Starttid må være før slutttid!");
+        return;
+    }
+
+    // Oppdater den globale variabelen
+    myWorkHours.start = s;
+    myWorkHours.end = e;
+
+    // Lagre til localStorage
+    localStorage.setItem('workHoursStart', s);
+    localStorage.setItem('workHoursEnd', e);
+
+    // Tegn gridet på nytt for å vise de nye hvite "åpningstidene"
+    document.getElementById('timeLabels').innerHTML = '';
+    const gridBody = document.getElementById('gridBody');
+    // Behold time-col, fjern day-cols
+    Array.from(gridBody.children).forEach(child => {
+        if (child.id !== 'timeLabels') child.remove();
+    });
+
+    initGrid();     // Tegner opp de hvite boksene på nytt basert på myWorkHours
+    renderEvents(); // Tegner avtalene på nytt
+    setupCurrentTime(); // Legger på den røde streken igjen
+
+    closeUserProfile();
+    alert('Arbeidstid lagret!');
 }

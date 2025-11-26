@@ -23,7 +23,7 @@
 
         <div class="nav-group">
             <div class="nav-title">Min konto</div>
-            <a href="#" class="nav-item" onclick="showSection('user-settings'); return false;"><i data-lucide="user"></i> Bruker</a>
+            <a href="#" class="nav-item" onclick="openWorkHoursModal(); return false;"><i data-lucide="user"></i> Bruker (Arbeidstid)</a>
             <a href="#" class="nav-item" onclick="showSection('practitioner-settings'); return false;"><i data-lucide="briefcase"></i> Behandlere</a>
             <a href="#" class="nav-item" onclick="showSection('notification-settings'); return false;"><i data-lucide="bell"></i> Varslinger</a>
         </div>
@@ -395,6 +395,34 @@
                 <button type="button" class="btn-danger" id="btnDeletePractitioner" style="display:none;" onclick="deletePractitioner()">Slett</button>
                 <button type="button" class="btn-secondary" onclick="closePractitionerModal()">Avbryt</button>
                 <button type="button" class="btn-primary" onclick="savePractitioner()">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Profile / Work Hours Modal -->
+    <div class="modal-overlay" id="userProfileModal">
+        <div class="modal-box" style="width: 350px;">
+            <div class="modal-header">
+                <h3>Min Profil & Arbeidstid</h3>
+                <button class="close-modal" onclick="closeUserProfile()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <p style="font-size:13px; color:#666;">Her styrer du når kalenderen vises som åpen (hvit) vs stengt (stripete).</p>
+            </div>
+
+            <div class="form-group">
+                <label>Start på dagen (kl)</label>
+                <input type="number" id="userStartHour" class="form-input" min="0" max="23" value="8">
+            </div>
+
+            <div class="form-group">
+                <label>Slutt på dagen (kl)</label>
+                <input type="number" id="userEndHour" class="form-input" min="0" max="23" value="16">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="saveWorkHours()">Lagre Arbeidstid</button>
             </div>
         </div>
     </div>
