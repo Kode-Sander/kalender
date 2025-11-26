@@ -288,9 +288,6 @@ function initGrid() {
     }
 }
 
-// Global variable for drag state
-let draggedAppointment = null;
-
 function renderEvents() {
     document.querySelectorAll('.event-card').forEach(e => e.remove());
 
@@ -307,36 +304,26 @@ function renderEvents() {
         card.className = 'event-card';
         card.style.top = (startOffset / 60 * hourHeight) + 'px';
         card.style.height = (duration / 60 * hourHeight) + 'px';
-        card.draggable = true;
         card.dataset.appointmentId = appt.id;
 
         const videoIcon = appt.video_link
-            ? `<i data-lucide="video" size="12" style="margin-left:4px; color:#0052cc; cursor:pointer;"></i>`
+            ? `<i data-lucide="video" size="12" style="color:#0052cc; cursor:pointer;"></i>`
             : '';
 
         card.innerHTML = `
-            <div class="event-time">
-                <span>${appt.start} - ${appt.end}</span>
-                ${videoIcon}
+            <div class="event-inner">
+                <div class="event-time">
+                    <span>${appt.start} - ${appt.end}</span>
+                    ${videoIcon}
+                </div>
+                <div class="event-title">${appt.patient}</div>
+                <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
             </div>
-            <div class="event-title">${appt.patient}</div>
-            <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
             <div class="resize-handle resize-handle-top"></div>
             <div class="resize-handle resize-handle-bottom"></div>
         `;
 
-        // Drag events
-        card.addEventListener('dragstart', (e) => {
-            draggedAppointment = appt;
-            card.style.opacity = '0.5';
-            e.dataTransfer.effectAllowed = 'move';
-        });
-
-        card.addEventListener('dragend', (e) => {
-            card.style.opacity = '1';
-            draggedAppointment = null;
-        });
-
+        // Click to edit
         card.addEventListener('click', (e) => {
             if (e.target.classList.contains('resize-handle')) return;
             e.stopPropagation();
@@ -356,59 +343,18 @@ function renderEvents() {
             }
         }
 
-        // Add resize handlers
-        setupResizeHandlers(card, appt);
+        // Add drag and resize handlers
+        setupDraggable(card, appt, col);
+        setupResizable(card, appt);
     });
 
     // Re-create all Lucide icons once after all events are rendered
     lucide.createIcons();
 }
 
-// Setup drag and drop on day columns
+// No longer needed - we handle drag internally now
 function initDragAndDrop() {
-    document.querySelectorAll('.day-col').forEach((col, dayIndex) => {
-        col.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        });
-
-        col.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            if (!draggedAppointment) return;
-
-            const rect = col.getBoundingClientRect();
-            const y = e.clientY - rect.top;
-            const minutesFromStart = (y / hourHeight) * 60;
-            const totalMinutes = (startHour * 60) + minutesFromStart;
-
-            // Snap to 15-minute intervals
-            const snappedMinutes = Math.round(totalMinutes / 15) * 15;
-            const newStartHour = Math.floor(snappedMinutes / 60);
-            const newStartMin = snappedMinutes % 60;
-
-            // Calculate duration
-            const oldStart = timeToMinutes(draggedAppointment.start);
-            const oldEnd = timeToMinutes(draggedAppointment.end);
-            const duration = oldEnd - oldStart;
-
-            // Calculate new end time
-            const newEndTotalMin = snappedMinutes + duration;
-            const newEndHour = Math.floor(newEndTotalMin / 60);
-            const newEndMin = newEndTotalMin % 60;
-
-            // Update appointment
-            const dateForCol = new Date(currentWeekStart);
-            dateForCol.setDate(dateForCol.getDate() + dayIndex);
-
-            const startDateTime = new Date(dateForCol);
-            startDateTime.setHours(newStartHour, newStartMin, 0);
-
-            const endDateTime = new Date(dateForCol);
-            endDateTime.setHours(newEndHour, newEndMin, 0);
-
-            await updateAppointmentTime(draggedAppointment.id, startDateTime, endDateTime);
-        });
-    });
+    // This function is no longer needed as drag is handled per-card
 }
 
 async function updateAppointmentTime(appointmentId, newStart, newEnd) {
@@ -449,26 +395,96 @@ async function updateAppointmentTime(appointmentId, newStart, newEnd) {
     }
 }
 
-// Setup resize handlers for appointments
-function setupResizeHandlers(card, appt) {
+// Setup drag functionality with mousedown/mousemove
+function setupDraggable(card, appt, col) {
+    let isDragging = false;
+    let startY = 0;
+    let startX = 0;
+    let initialTop = 0;
+    let originalColumn = col;
+
+    card.addEventListener('mousedown', (e) => {
+        // Don't start drag if clicking on resize handle
+        if (e.target.classList.contains('resize-handle')) return;
+
+        isDragging = true;
+        startY = e.clientY;
+        startX = e.clientX;
+        initialTop = parseInt(card.style.top || 0);
+
+        card.style.zIndex = '100';
+        e.stopPropagation();
+        e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        const deltaY = e.clientY - startY;
+        const newTop = initialTop + deltaY;
+        card.style.top = `${Math.max(0, newTop)}px`;
+    });
+
+    window.addEventListener('mouseup', async (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        card.style.zIndex = '';
+
+        // Snap to 15 minute intervals
+        const snapInterval = (hourHeight / 60) * 15; // 15 minutes in pixels
+        const currentTop = parseInt(card.style.top || 0);
+        const snappedTop = Math.round(currentTop / snapInterval) * snapInterval;
+
+        card.style.top = `${snappedTop}px`;
+
+        // Calculate new time
+        const minutesFromStart = (snappedTop / hourHeight) * 60;
+        const totalStartMinutes = (startHour * 60) + minutesFromStart;
+
+        // Calculate duration
+        const oldStart = timeToMinutes(appt.start);
+        const oldEnd = timeToMinutes(appt.end);
+        const durationMin = oldEnd - oldStart;
+
+        const totalEndMinutes = totalStartMinutes + durationMin;
+
+        const newStartHour = Math.floor(totalStartMinutes / 60);
+        const newStartMin = totalStartMinutes % 60;
+        const newEndHour = Math.floor(totalEndMinutes / 60);
+        const newEndMin = totalEndMinutes % 60;
+
+        // Update appointment
+        const dateForAppt = new Date(appt.fullDate);
+        const startDateTime = new Date(dateForAppt);
+        startDateTime.setHours(newStartHour, newStartMin, 0);
+
+        const endDateTime = new Date(dateForAppt);
+        endDateTime.setHours(newEndHour, newEndMin, 0);
+
+        await updateAppointmentTime(appt.id, startDateTime, endDateTime);
+    });
+}
+
+// Setup resize functionality
+function setupResizable(card, appt) {
     const topHandle = card.querySelector('.resize-handle-top');
     const bottomHandle = card.querySelector('.resize-handle-bottom');
 
     let isResizing = false;
     let resizeDirection = null;
     let startY = 0;
-    let startHeight = 0;
-    let startTop = 0;
+    let initialHeight = 0;
+    let initialTop = 0;
 
     const startResize = (e, direction) => {
-        e.stopPropagation();
-        e.preventDefault();
         isResizing = true;
         resizeDirection = direction;
         startY = e.clientY;
-        startHeight = card.offsetHeight;
-        startTop = card.offsetTop;
-        card.style.userSelect = 'none';
+        initialHeight = parseInt(card.style.height || 0);
+        initialTop = parseInt(card.style.top || 0);
+
+        e.stopPropagation();
+        e.preventDefault();
         document.body.style.cursor = 'ns-resize';
     };
 
@@ -479,14 +495,14 @@ function setupResizeHandlers(card, appt) {
         const deltaY = e.clientY - startY;
 
         if (resizeDirection === 'bottom') {
-            const newHeight = Math.max(30, startHeight + deltaY);
-            card.style.height = newHeight + 'px';
+            const newHeight = Math.max(30, initialHeight + deltaY);
+            card.style.height = `${newHeight}px`;
         } else if (resizeDirection === 'top') {
-            const newTop = startTop + deltaY;
-            const newHeight = startHeight - deltaY;
+            const newTop = initialTop + deltaY;
+            const newHeight = initialHeight - deltaY;
             if (newHeight >= 30) {
-                card.style.top = newTop + 'px';
-                card.style.height = newHeight + 'px';
+                card.style.top = `${newTop}px`;
+                card.style.height = `${newHeight}px`;
             }
         }
     };
@@ -495,28 +511,31 @@ function setupResizeHandlers(card, appt) {
         if (!isResizing) return;
         isResizing = false;
         document.body.style.cursor = '';
-        card.style.userSelect = '';
+
+        // Snap to 15 minute intervals
+        const snapInterval = (hourHeight / 60) * 15;
+        const currentTop = parseInt(card.style.top || 0);
+        const currentHeight = parseInt(card.style.height || 0);
+
+        const snappedTop = Math.round(currentTop / snapInterval) * snapInterval;
+        const snappedHeight = Math.max(snapInterval, Math.round(currentHeight / snapInterval) * snapInterval);
+
+        card.style.top = `${snappedTop}px`;
+        card.style.height = `${snappedHeight}px`;
 
         // Calculate new times
-        const newTopPx = parseFloat(card.style.top);
-        const newHeightPx = parseFloat(card.style.height);
+        const startMinutesFromDayStart = (snappedTop / hourHeight) * 60;
+        const durationMinutes = (snappedHeight / hourHeight) * 60;
 
-        const startMinutesFromDayStart = (newTopPx / hourHeight) * 60;
-        const durationMinutes = (newHeightPx / hourHeight) * 60;
-
-        // Snap to 15-minute intervals
-        const snappedStart = Math.round(startMinutesFromDayStart / 15) * 15;
-        const snappedDuration = Math.max(15, Math.round(durationMinutes / 15) * 15);
-
-        const totalStartMinutes = (startHour * 60) + snappedStart;
-        const totalEndMinutes = totalStartMinutes + snappedDuration;
+        const totalStartMinutes = (startHour * 60) + startMinutesFromDayStart;
+        const totalEndMinutes = totalStartMinutes + durationMinutes;
 
         const newStartHour = Math.floor(totalStartMinutes / 60);
         const newStartMin = totalStartMinutes % 60;
         const newEndHour = Math.floor(totalEndMinutes / 60);
         const newEndMin = totalEndMinutes % 60;
 
-        // Calculate date
+        // Update appointment
         const dateForAppt = new Date(appt.fullDate);
         const startDateTime = new Date(dateForAppt);
         startDateTime.setHours(newStartHour, newStartMin, 0);
@@ -530,8 +549,8 @@ function setupResizeHandlers(card, appt) {
     topHandle.addEventListener('mousedown', (e) => startResize(e, 'top'));
     bottomHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
 
-    document.addEventListener('mousemove', doResize);
-    document.addEventListener('mouseup', stopResize);
+    window.addEventListener('mousemove', doResize);
+    window.addEventListener('mouseup', stopResize);
 }
 
 // --- HJELPEFUNKSJONER ---
