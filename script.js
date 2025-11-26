@@ -60,14 +60,24 @@ function getStartOfWeek(date) {
 }
 
 function updateHeaderDates() {
-    const headerCells = document.querySelectorAll('.header-cell .day-num');
+    const headerCells = document.querySelectorAll('.header-cell');
     const dateRangeSpan = document.querySelector('.current-date-range');
+    const norwegianDayNames = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'];
 
     for (let i = 0; i < 7; i++) {
         const d = new Date(currentWeekStart);
         d.setDate(currentWeekStart.getDate() + i);
 
-        if(headerCells[i]) headerCells[i].innerText = d.getDate();
+        if(headerCells[i + 1]) {
+            const dayNum = headerCells[i + 1].querySelector('.day-num');
+            if(dayNum) dayNum.innerText = d.getDate();
+
+            // Update day name
+            const dayName = headerCells[i + 1].childNodes[0];
+            if(dayName && dayName.nodeType === Node.TEXT_NODE) {
+                dayName.textContent = norwegianDayNames[i] + ' ';
+            }
+        }
     }
 
     const endOfWeek = new Date(currentWeekStart);

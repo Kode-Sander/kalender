@@ -16,16 +16,16 @@
         </div>
 
         <div class="nav-group">
-            <div class="nav-title">Schedule</div>
-            <a href="#" class="nav-item active" onclick="showSection('calendar'); return false;"><i data-lucide="calendar"></i> Calendar</a>
-            <a href="#" class="nav-item" onclick="showSection('video-consultations'); return false;"><i data-lucide="video"></i> Video consultations</a>
+            <div class="nav-title">Timeplan</div>
+            <a href="#" class="nav-item active" onclick="showSection('calendar'); return false;"><i data-lucide="calendar"></i> Kalender</a>
+            <a href="#" class="nav-item" onclick="showSection('video-consultations'); return false;"><i data-lucide="video"></i> Videokonsultasjoner</a>
         </div>
 
         <div class="nav-group">
-            <div class="nav-title">My Account</div>
-            <a href="#" class="nav-item" onclick="showSection('user-settings'); return false;"><i data-lucide="user"></i> User</a>
-            <a href="#" class="nav-item" onclick="showSection('practitioner-settings'); return false;"><i data-lucide="briefcase"></i> Practitioner</a>
-            <a href="#" class="nav-item" onclick="showSection('notification-settings'); return false;"><i data-lucide="bell"></i> Notification settings</a>
+            <div class="nav-title">Min konto</div>
+            <a href="#" class="nav-item" onclick="showSection('user-settings'); return false;"><i data-lucide="user"></i> Bruker</a>
+            <a href="#" class="nav-item" onclick="showSection('practitioner-settings'); return false;"><i data-lucide="briefcase"></i> Behandlere</a>
+            <a href="#" class="nav-item" onclick="showSection('notification-settings'); return false;"><i data-lucide="bell"></i> Varslinger</a>
         </div>
 
         <div class="user-footer">
@@ -54,14 +54,14 @@
                 <div class="action-bar">
                     <div style="display:flex; align-items:center;">
                         <div class="view-toggles">
-                            <button class="toggle-btn" onclick="setView('day')">Day</button>
-                            <button class="toggle-btn active" onclick="setView('week')">Week</button>
+                            <button class="toggle-btn" onclick="setView('day')">Dag</button>
+                            <button class="toggle-btn active" onclick="setView('week')">Uke</button>
                         </div>
                         <div class="date-nav">
                             <button class="nav-btn" onclick="changeWeek(-1)"><i data-lucide="chevron-left" size="16"></i></button>
                             <span class="current-date-range">24.11 - 30.11 Nov 2025</span>
                             <button class="nav-btn" onclick="changeWeek(1)"><i data-lucide="chevron-right" size="16"></i></button>
-                            <button class="outline-btn" onclick="goToToday()">Today</button>
+                            <button class="outline-btn" onclick="goToToday()">I dag</button>
                         </div>
                     </div>
 
@@ -72,7 +72,7 @@
                                 <option value="all">Alle behandlere</option>
                             </select>
                         </div>
-                        <button class="outline-btn" onclick="toggleSettings(true)"><i data-lucide="settings" size="14"></i> Settings</button>
+                        <button class="outline-btn" onclick="toggleSettings(true)"><i data-lucide="settings" size="14"></i> Innstillinger</button>
                     </div>
                 </div>
             </header>
@@ -80,13 +80,13 @@
             <div class="calendar-container">
                 <div class="grid-header">
                     <div class="header-cell" style="border-bottom:none"></div>
-                    <div class="header-cell">Mon <span class="day-num">24</span></div>
-                    <div class="header-cell">Tue <span class="day-num">25</span></div>
-                    <div class="header-cell active">Wed <span class="day-num">26</span></div>
-                    <div class="header-cell">Thu <span class="day-num">27</span></div>
-                    <div class="header-cell">Fri <span class="day-num">28</span></div>
-                    <div class="header-cell">Sat <span class="day-num">29</span></div>
-                    <div class="header-cell">Sun <span class="day-num">30</span></div>
+                    <div class="header-cell">Man <span class="day-num">24</span></div>
+                    <div class="header-cell">Tir <span class="day-num">25</span></div>
+                    <div class="header-cell active">Ons <span class="day-num">26</span></div>
+                    <div class="header-cell">Tor <span class="day-num">27</span></div>
+                    <div class="header-cell">Fre <span class="day-num">28</span></div>
+                    <div class="header-cell">Lør <span class="day-num">29</span></div>
+                    <div class="header-cell">Søn <span class="day-num">30</span></div>
                 </div>
 
                 <div class="grid-body" id="gridBody">
