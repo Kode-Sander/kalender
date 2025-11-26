@@ -17,15 +17,15 @@
 
         <div class="nav-group">
             <div class="nav-title">Schedule</div>
-            <a href="#" class="nav-item active"><i data-lucide="calendar"></i> Calendar</a>
-            <a href="#" class="nav-item"><i data-lucide="video"></i> Video consultations</a>
+            <a href="#" class="nav-item active" onclick="return false;"><i data-lucide="calendar"></i> Calendar</a>
+            <a href="#" class="nav-item" onclick="alert('Video consultations: Kommer snart!'); return false;" style="opacity: 0.6;"><i data-lucide="video"></i> Video consultations</a>
         </div>
 
         <div class="nav-group">
             <div class="nav-title">My Account</div>
-            <a href="#" class="nav-item"><i data-lucide="user"></i> User</a>
-            <a href="#" class="nav-item"><i data-lucide="briefcase"></i> Practitioner</a>
-            <a href="#" class="nav-item"><i data-lucide="bell"></i> Notification settings</a>
+            <a href="#" class="nav-item" onclick="alert('User settings: Kommer snart!'); return false;" style="opacity: 0.6;"><i data-lucide="user"></i> User</a>
+            <a href="#" class="nav-item" onclick="alert('Practitioner settings: Kommer snart!'); return false;" style="opacity: 0.6;"><i data-lucide="briefcase"></i> Practitioner</a>
+            <a href="#" class="nav-item" onclick="alert('Notification settings: Kommer snart!'); return false;" style="opacity: 0.6;"><i data-lucide="bell"></i> Notification settings</a>
         </div>
 
         <div class="user-footer">
@@ -52,8 +52,8 @@
             <div class="action-bar">
                 <div style="display:flex; align-items:center;">
                     <div class="view-toggles">
-                        <button class="toggle-btn">Day</button>
-                        <button class="toggle-btn active">Week</button>
+                        <button class="toggle-btn" onclick="setView('day')">Day</button>
+                        <button class="toggle-btn active" onclick="setView('week')">Week</button>
                     </div>
                     <div class="date-nav">
                         <button class="nav-btn" onclick="changeWeek(-1)"><i data-lucide="chevron-left" size="16"></i></button>

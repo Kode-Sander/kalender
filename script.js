@@ -9,6 +9,7 @@ const hourHeight = 60;
 let appointments = [];
 let practitioners = [];
 let currentWeekStart = getStartOfWeek(new Date());
+let currentView = 'week'; // 'day' or 'week'
 
 // --- INITIALISERING ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -466,6 +467,82 @@ async function logout() {
         console.error('Logout failed:', error);
         alert('Kunne ikke logge ut. Prøv igjen.');
     }
+}
+
+// --- VIEW TOGGLE (DAY/WEEK) ---
+function setView(view) {
+    currentView = view;
+
+    // Update button states
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    if (view === 'day') {
+        document.querySelector('.toggle-btn:first-child').classList.add('active');
+        showDayView();
+    } else {
+        document.querySelector('.toggle-btn:nth-child(2)').classList.add('active');
+        showWeekView();
+    }
+}
+
+function showDayView() {
+    // Hide all day columns except today
+    const today = new Date();
+    const todayIndex = today.getDay() - 1; // Convert to 0=Mon, 6=Sun
+    const adjustedToday = todayIndex === -1 ? 6 : todayIndex;
+
+    // Update grid to show only one column
+    const gridHeader = document.querySelector('.grid-header');
+    const gridBody = document.querySelector('.grid-body');
+
+    gridHeader.style.gridTemplateColumns = '60px 1fr';
+    gridBody.style.gridTemplateColumns = '60px 1fr';
+
+    // Hide all day columns except today
+    for (let i = 0; i < 7; i++) {
+        const headerCell = document.querySelector(`.header-cell:nth-child(${i + 2})`);
+        const dayCol = document.getElementById(`day-${i}`);
+
+        if (i === adjustedToday) {
+            if (headerCell) headerCell.style.display = 'block';
+            if (dayCol) dayCol.style.display = 'block';
+        } else {
+            if (headerCell) headerCell.style.display = 'none';
+            if (dayCol) dayCol.style.display = 'none';
+        }
+    }
+
+    // Update date range text
+    const dateRangeSpan = document.querySelector('.current-date-range');
+    dateRangeSpan.innerText = today.toLocaleDateString('no-NO', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
+function showWeekView() {
+    // Show all day columns
+    const gridHeader = document.querySelector('.grid-header');
+    const gridBody = document.querySelector('.grid-body');
+
+    gridHeader.style.gridTemplateColumns = '60px repeat(7, 1fr)';
+    gridBody.style.gridTemplateColumns = '60px repeat(7, 1fr)';
+
+    // Show all day columns
+    for (let i = 0; i < 7; i++) {
+        const headerCell = document.querySelector(`.header-cell:nth-child(${i + 2})`);
+        const dayCol = document.getElementById(`day-${i}`);
+
+        if (headerCell) headerCell.style.display = 'block';
+        if (dayCol) dayCol.style.display = 'block';
+    }
+
+    // Restore week view date range
+    updateHeaderDates();
 }
 
 // --- SETTINGS ---
