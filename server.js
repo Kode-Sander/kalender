@@ -2,14 +2,29 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const path = require('path');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const PORT = 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000',
+    credentials: true
+}));
 app.use(express.json());
 app.use(express.static(__dirname)); // Serve static files (HTML, CSS, JS)
+app.use(session({
+    secret: 'super-hemmelig-nokkel-endre-dette-i-produksjon',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false, // Set to true if using HTTPS
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
 
 // Database setup
 const db = new sqlite3.Database('./calendar.db', (err) => {
@@ -58,7 +73,95 @@ db.run(`ALTER TABLE appointments ADD COLUMN practitioner_id INTEGER`, (err) => {
     if (!err) console.log("Added practitioner_id column to appointments.");
 });
 
+// Add video_link column to appointments if it doesn't exist
+db.run(`ALTER TABLE appointments ADD COLUMN video_link TEXT`, (err) => {
+    if (!err) console.log("Added video_link column to appointments.");
+});
+
+// Add username and password columns to practitioners if they don't exist
+db.run(`ALTER TABLE practitioners ADD COLUMN username TEXT`, (err) => {
+    if (!err) console.log("Added username column to practitioners.");
+});
+
+db.run(`ALTER TABLE practitioners ADD COLUMN password TEXT`, (err) => {
+    if (!err) {
+        console.log("Added password column to practitioners.");
+        // Create default admin user with hashed password
+        const hash = bcrypt.hashSync('passord123', 10);
+        db.run(`UPDATE practitioners SET username='admin', password=? WHERE id=1`, [hash], (updateErr) => {
+            if (!updateErr) console.log("Created default admin user (username: admin, password: passord123)");
+        });
+    }
+});
+
+// Middleware for authentication
+function isAuthenticated(req, res, next) {
+    if (req.session.userId) {
+        return next();
+    }
+    res.status(401).json({ error: 'Unauthorized' });
+}
+
 // API Routes
+
+// Login route
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    db.get("SELECT * FROM practitioners WHERE username = ?", [username], async (err, user) => {
+        if (err) {
+            console.error('Error finding user:', err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        if (!user) {
+            return res.status(401).json({ error: 'Feil brukernavn' });
+        }
+
+        try {
+            const match = await bcrypt.compare(password, user.password);
+            if (match) {
+                req.session.userId = user.id;
+                req.session.userName = user.name;
+                res.json({
+                    message: 'Logget inn',
+                    user: { id: user.id, name: user.name, role: user.role }
+                });
+            } else {
+                res.status(401).json({ error: 'Feil passord' });
+            }
+        } catch (compareErr) {
+            console.error('Error comparing passwords:', compareErr);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+});
+
+// Logout route
+app.post('/api/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Could not log out' });
+        }
+        res.json({ message: 'Logget ut' });
+    });
+});
+
+// Check session route
+app.get('/api/session', (req, res) => {
+    if (req.session.userId) {
+        res.json({
+            authenticated: true,
+            user: { id: req.session.userId, name: req.session.userName }
+        });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
 
 // Get all practitioners
 app.get('/api/practitioners', (req, res) => {
@@ -99,9 +202,9 @@ app.get('/api/appointments', (req, res) => {
     });
 });
 
-// 2. Create new appointment with collision check
-app.post('/api/appointments', (req, res) => {
-    const { start_time, end_time, patient, type, practitioner_id } = req.body;
+// 2. Create new appointment with collision check (Protected)
+app.post('/api/appointments', isAuthenticated, (req, res) => {
+    const { start_time, end_time, patient, type, practitioner_id, video_link } = req.body;
 
     if (!start_time || !end_time || !patient || !type) {
         return res.status(400).json({ error: 'All fields are required' });
@@ -125,9 +228,9 @@ app.post('/api/appointments', (req, res) => {
         }
 
         // No collision, insert appointment
-        const insertSql = `INSERT INTO appointments (start_time, end_time, patient, type, practitioner_id) VALUES (?, ?, ?, ?, ?)`;
+        const insertSql = `INSERT INTO appointments (start_time, end_time, patient, type, practitioner_id, video_link) VALUES (?, ?, ?, ?, ?, ?)`;
 
-        db.run(insertSql, [start_time, end_time, patient, type, practitioner_id], function(err) {
+        db.run(insertSql, [start_time, end_time, patient, type, practitioner_id, video_link], function(err) {
             if (err) {
                 console.error('Error inserting appointment:', err.message);
                 return res.status(500).json({ error: err.message });
@@ -138,14 +241,15 @@ app.post('/api/appointments', (req, res) => {
                 end_time,
                 patient,
                 type,
-                practitioner_id
+                practitioner_id,
+                video_link
             });
         });
     });
 });
 
-// 3. Delete appointment
-app.delete('/api/appointments/:id', (req, res) => {
+// 3. Delete appointment (Protected)
+app.delete('/api/appointments/:id', isAuthenticated, (req, res) => {
     const { id } = req.params;
 
     const sql = "DELETE FROM appointments WHERE id = ?";
@@ -164,8 +268,11 @@ app.delete('/api/appointments/:id', (req, res) => {
     });
 });
 
-// Serve index.html for root path
+// Serve index.html for root path (with authentication check)
 app.get('/', (req, res) => {
+    if (!req.session.userId) {
+        return res.sendFile(path.join(__dirname, 'login.html'));
+    }
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 

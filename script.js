@@ -1,7 +1,8 @@
 // --- KONFIGURASJON ---
 const API_URL = 'http://localhost:3000/api';
-let startHour = 7;  // Endret fra const til let for settings
-let endHour = 17;   // Endret fra const til let for settings
+// Hent innstillinger fra nettleserens minne, eller bruk standard
+let startHour = parseInt(localStorage.getItem('calendarStartHour')) || 7;
+let endHour = parseInt(localStorage.getItem('calendarEndHour')) || 17;
 const hourHeight = 60;
 
 // Globale variabler
@@ -18,6 +19,17 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAppointments();
     setupCurrentTime();
     setInterval(setupCurrentTime, 60000);
+
+    // Vis/skjul videolenke-felt basert på type
+    document.getElementById('inputType').addEventListener('change', function() {
+        const videoGroup = document.getElementById('videoLinkGroup');
+        if (this.value === 'Videokonsultasjon') {
+            videoGroup.style.display = 'block';
+        } else {
+            videoGroup.style.display = 'none';
+            document.getElementById('inputVideoLink').value = '';
+        }
+    });
 });
 
 // --- HJELPEFUNKSJONER FOR DATO ---
@@ -118,6 +130,7 @@ async function fetchAppointments() {
                 type: appt.type,
                 practitioner_id: appt.practitioner_id,
                 practitioner_name: practitioner ? practitioner.name : 'Ukjent',
+                video_link: appt.video_link,
                 fullDate: startDate
             };
         });
@@ -156,7 +169,8 @@ async function saveAppointment() {
         end_time: endDateTime.toISOString(),
         patient: document.getElementById('inputPatient').value,
         type: document.getElementById('inputType').value,
-        practitioner_id: practitionerId
+        practitioner_id: practitionerId,
+        video_link: document.getElementById('inputVideoLink').value || null
     };
 
     try {
@@ -252,11 +266,32 @@ function renderEvents() {
         card.style.top = (startOffset / 60 * hourHeight) + 'px';
         card.style.height = (duration / 60 * hourHeight) + 'px';
 
+        const videoIcon = appt.video_link
+            ? `<i data-lucide="video" size="12" style="margin-left:4px; color:#0052cc; cursor:pointer;"></i>`
+            : '';
+
         card.innerHTML = `
-            <div class="event-time">${appt.start} - ${appt.end}</div>
+            <div class="event-time" style="display:flex; align-items:center;">
+                <span>${appt.start} - ${appt.end}</span>
+                ${videoIcon}
+            </div>
             <div class="event-title">${appt.patient}</div>
             <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
         `;
+
+        // Add click handler for video icon
+        if (appt.video_link) {
+            const videoIconEl = card.querySelector('[data-lucide="video"]');
+            if (videoIconEl) {
+                videoIconEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    window.open(appt.video_link, '_blank');
+                });
+            }
+        }
+
+        // Re-create icons after adding to DOM
+        setTimeout(() => lucide.createIcons(), 0);
 
         card.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -349,6 +384,10 @@ function handleGridClick(e, dayIndex) {
         practitionerInput.value = '';
     }
 
+    // Reset video link field
+    document.getElementById('inputVideoLink').value = '';
+    document.getElementById('videoLinkGroup').style.display = 'none';
+
     btnDelete.style.display = 'none';
     modalTitle.innerText = "Ny avtale";
 
@@ -363,6 +402,17 @@ function openModalForEdit(appt) {
     inputDayIndex.value = appt.day;
     inputType.value = appt.type;
     document.getElementById('inputPractitioner').value = appt.practitioner_id || '';
+
+    // Set video link and show/hide field
+    const videoLinkInput = document.getElementById('inputVideoLink');
+    const videoLinkGroup = document.getElementById('videoLinkGroup');
+    if (appt.type === 'Videokonsultasjon') {
+        videoLinkInput.value = appt.video_link || '';
+        videoLinkGroup.style.display = 'block';
+    } else {
+        videoLinkInput.value = '';
+        videoLinkGroup.style.display = 'none';
+    }
 
     btnDelete.style.display = 'block';
     modalTitle.innerText = "Rediger avtale";
@@ -400,6 +450,10 @@ function saveSettings() {
 
     startHour = newStart;
     endHour = newEnd;
+
+    // Lagre til localStorage
+    localStorage.setItem('calendarStartHour', startHour);
+    localStorage.setItem('calendarEndHour', endHour);
 
     // Clear and rebuild grid
     document.getElementById('timeLabels').innerHTML = '';
