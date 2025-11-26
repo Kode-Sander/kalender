@@ -10,6 +10,8 @@ let appointments = [];
 let practitioners = [];
 let currentWeekStart = getStartOfWeek(new Date());
 let currentView = 'week'; // 'day' or 'week'
+let isDraggingGlobal = false;
+let isResizingGlobal = false;
 
 // --- INITIALISERING ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -327,6 +329,14 @@ function renderEvents() {
         card.addEventListener('click', (e) => {
             if (e.target.classList.contains('resize-handle')) return;
             e.stopPropagation();
+
+            // Check if card was just dragged or resized
+            if (card.dataset.wasDragged === 'true' || card.dataset.wasResized === 'true') {
+                card.dataset.wasDragged = 'false';
+                card.dataset.wasResized = 'false';
+                return;
+            }
+
             openModalForEdit(appt);
         });
 
@@ -401,13 +411,14 @@ function setupDraggable(card, appt, col) {
     let startY = 0;
     let startX = 0;
     let initialTop = 0;
-    let originalColumn = col;
+    let currentColumn = col;
 
     card.addEventListener('mousedown', (e) => {
         // Don't start drag if clicking on resize handle
         if (e.target.classList.contains('resize-handle')) return;
 
         isDragging = true;
+        isDraggingGlobal = true;
         startY = e.clientY;
         startX = e.clientX;
         initialTop = parseInt(card.style.top || 0);
@@ -423,12 +434,34 @@ function setupDraggable(card, appt, col) {
         const deltaY = e.clientY - startY;
         const newTop = initialTop + deltaY;
         card.style.top = `${Math.max(0, newTop)}px`;
+
+        // Update time display in real-time
+        const currentHeight = parseInt(card.style.height || 0);
+        updateCardTimeDisplay(card, Math.max(0, newTop), currentHeight);
+
+        // Check which column the mouse is over
+        card.style.visibility = 'hidden';
+        const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+        card.style.visibility = 'visible';
+
+        if (elementBelow) {
+            const newCol = elementBelow.closest('.day-col');
+            if (newCol && newCol !== currentColumn) {
+                // Move card to new column
+                currentColumn = newCol;
+                newCol.appendChild(card);
+            }
+        }
     });
 
     window.addEventListener('mouseup', async (e) => {
         if (!isDragging) return;
         isDragging = false;
+        isDraggingGlobal = false;
         card.style.zIndex = '';
+
+        // Mark card as dragged to prevent modal from opening
+        card.dataset.wasDragged = 'true';
 
         // Snap to 15 minute intervals
         const snapInterval = (hourHeight / 60) * 15; // 15 minutes in pixels
@@ -436,6 +469,10 @@ function setupDraggable(card, appt, col) {
         const snappedTop = Math.round(currentTop / snapInterval) * snapInterval;
 
         card.style.top = `${snappedTop}px`;
+
+        // Find which day column we're in
+        const colId = currentColumn.id;
+        const newDayIndex = parseInt(colId.replace('day-', ''));
 
         // Calculate new time
         const minutesFromStart = (snappedTop / hourHeight) * 60;
@@ -453,12 +490,14 @@ function setupDraggable(card, appt, col) {
         const newEndHour = Math.floor(totalEndMinutes / 60);
         const newEndMin = totalEndMinutes % 60;
 
-        // Update appointment
-        const dateForAppt = new Date(appt.fullDate);
-        const startDateTime = new Date(dateForAppt);
+        // Calculate the date for the new day
+        const dateForNewDay = new Date(currentWeekStart);
+        dateForNewDay.setDate(currentWeekStart.getDate() + newDayIndex);
+
+        const startDateTime = new Date(dateForNewDay);
         startDateTime.setHours(newStartHour, newStartMin, 0);
 
-        const endDateTime = new Date(dateForAppt);
+        const endDateTime = new Date(dateForNewDay);
         endDateTime.setHours(newEndHour, newEndMin, 0);
 
         await updateAppointmentTime(appt.id, startDateTime, endDateTime);
@@ -478,6 +517,7 @@ function setupResizable(card, appt) {
 
     const startResize = (e, direction) => {
         isResizing = true;
+        isResizingGlobal = true;
         resizeDirection = direction;
         startY = e.clientY;
         initialHeight = parseInt(card.style.height || 0);
@@ -497,12 +537,19 @@ function setupResizable(card, appt) {
         if (resizeDirection === 'bottom') {
             const newHeight = Math.max(30, initialHeight + deltaY);
             card.style.height = `${newHeight}px`;
+
+            // Update time display in real-time
+            const currentTop = parseInt(card.style.top || 0);
+            updateCardTimeDisplay(card, currentTop, newHeight);
         } else if (resizeDirection === 'top') {
             const newTop = initialTop + deltaY;
             const newHeight = initialHeight - deltaY;
             if (newHeight >= 30) {
                 card.style.top = `${newTop}px`;
                 card.style.height = `${newHeight}px`;
+
+                // Update time display in real-time
+                updateCardTimeDisplay(card, newTop, newHeight);
             }
         }
     };
@@ -510,7 +557,14 @@ function setupResizable(card, appt) {
     const stopResize = async (e) => {
         if (!isResizing) return;
         isResizing = false;
+        isResizingGlobal = false;
         document.body.style.cursor = '';
+
+        // Stop event propagation to prevent grid click
+        e.stopPropagation();
+
+        // Mark card as resized to prevent modal from opening
+        card.dataset.wasResized = 'true';
 
         // Snap to 15 minute intervals
         const snapInterval = (hourHeight / 60) * 15;
@@ -522,6 +576,9 @@ function setupResizable(card, appt) {
 
         card.style.top = `${snappedTop}px`;
         card.style.height = `${snappedHeight}px`;
+
+        // Update display with snapped values
+        updateCardTimeDisplay(card, snappedTop, snappedHeight);
 
         // Calculate new times
         const startMinutesFromDayStart = (snappedTop / hourHeight) * 60;
@@ -563,6 +620,21 @@ function minutesToTime(totalMin) {
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
     return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+}
+
+// Helper function to update card time display in real-time during drag/resize
+function updateCardTimeDisplay(card, topPx, heightPx) {
+    const startMinTotal = (topPx / hourHeight) * 60 + (startHour * 60);
+    const endMinTotal = startMinTotal + ((heightPx / hourHeight) * 60);
+
+    const newStartTime = minutesToTime(startMinTotal);
+    const newEndTime = minutesToTime(endMinTotal);
+
+    // Update only the time text in the event-time span
+    const timeSpan = card.querySelector('.event-time span');
+    if (timeSpan) {
+        timeSpan.textContent = `${newStartTime} - ${newEndTime}`;
+    }
 }
 
 function setupCurrentTime() {
@@ -611,6 +683,9 @@ function closeModal() {
 }
 
 function handleGridClick(e, dayIndex) {
+    // Prevent opening new appointment modal if we're dragging or resizing
+    if (isDraggingGlobal || isResizingGlobal) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const hoursFromStart = y / hourHeight;
