@@ -315,7 +315,7 @@ header {
     z-index: 10;
     cursor: grab;
     box-shadow: var(--shadow-sm);
-    transition: box-shadow var(--transition-fast);
+    transition: box-shadow var(--transition-fast), transform var(--transition-fast);
     overflow: hidden;
     user-select: none;
     display: flex;
