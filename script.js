@@ -327,8 +327,15 @@ function renderEvents() {
 
         // Click to edit
         card.addEventListener('click', (e) => {
-            if (e.target.classList.contains('resize-handle')) return;
+            // ALWAYS stop propagation first to prevent grid click
             e.stopPropagation();
+
+            // Don't open modal if clicking on resize handles
+            if (e.target.classList.contains('resize-handle') ||
+                e.target.classList.contains('resize-handle-top') ||
+                e.target.classList.contains('resize-handle-bottom')) {
+                return;
+            }
 
             // Check if card was just dragged or resized
             if (card.dataset.wasDragged === 'true' || card.dataset.wasResized === 'true') {
