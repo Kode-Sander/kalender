@@ -62,8 +62,13 @@
                 </div>
 
                 <div style="display:flex; gap:10px;">
-                    <button class="outline-btn"><i data-lucide="users" size="14"></i> Practitioners</button>
-                    <button class="outline-btn"><i data-lucide="settings" size="14"></i> Settings</button>
+                    <div class="practitioner-select-wrapper" style="position:relative;">
+                        <i data-lucide="users" size="14" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); pointer-events:none; z-index:1;"></i>
+                        <select id="practitionerSelect" class="outline-btn" style="padding-left: 30px; appearance: none; cursor: pointer;" onchange="fetchAppointments()">
+                            <option value="all">Alle behandlere</option>
+                        </select>
+                    </div>
+                    <button class="outline-btn" onclick="toggleSettings(true)"><i data-lucide="settings" size="14"></i> Settings</button>
                 </div>
             </div>
         </header>
@@ -98,6 +103,13 @@
                 <input type="text" id="inputPatient" class="form-input" placeholder="F.eks. Ola Nordmann">
             </div>
 
+            <div class="form-group">
+                <label>Behandler</label>
+                <select id="inputPractitioner" class="form-input">
+                    <option value="">Velg behandler...</option>
+                </select>
+            </div>
+
             <div class="row">
                 <div class="form-group" style="flex:1">
                     <label>Start Tid</label>
@@ -125,6 +137,29 @@
                 <button type="button" class="btn-danger" id="btnDelete" style="display:none;" onclick="deleteAppointment()">Slett</button>
                 <button type="button" class="btn-secondary" onclick="closeModal()">Avbryt</button>
                 <button type="button" class="btn-primary" onclick="saveAppointment()">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-box" style="width: 300px;">
+            <div class="modal-header">
+                <h3>Innstillinger</h3>
+                <button class="close-modal" onclick="toggleSettings(false)"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="form-group">
+                <label>Start på dagen (kl)</label>
+                <input type="number" id="settingStartHour" class="form-input" min="0" max="23" value="7">
+            </div>
+
+            <div class="form-group">
+                <label>Slutt på dagen (kl)</label>
+                <input type="number" id="settingEndHour" class="form-input" min="0" max="23" value="17">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="saveSettings()">Lagre & Oppdater</button>
             </div>
         </div>
     </div>
