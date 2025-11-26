@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     lucide.createIcons();
     initGrid();
+    initDragAndDrop();
     updateHeaderDates();
     fetchPractitioners();
     fetchAppointments();
@@ -40,7 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Vis/skjul videolenke-felt basert på type
     document.getElementById('inputType').addEventListener('change', function() {
         const videoGroup = document.getElementById('videoLinkGroup');
-        if (this.value === 'Videokonsultasjon') {
+        if (this.value.includes('Videokonsultasjon')) {
             videoGroup.style.display = 'block';
         } else {
             videoGroup.style.display = 'none';
@@ -287,6 +288,9 @@ function initGrid() {
     }
 }
 
+// Global variable for drag state
+let draggedAppointment = null;
+
 function renderEvents() {
     document.querySelectorAll('.event-card').forEach(e => e.remove());
 
@@ -303,21 +307,38 @@ function renderEvents() {
         card.className = 'event-card';
         card.style.top = (startOffset / 60 * hourHeight) + 'px';
         card.style.height = (duration / 60 * hourHeight) + 'px';
+        card.draggable = true;
+        card.dataset.appointmentId = appt.id;
 
         const videoIcon = appt.video_link
             ? `<i data-lucide="video" size="12" style="margin-left:4px; color:#0052cc; cursor:pointer;"></i>`
             : '';
 
         card.innerHTML = `
-            <div class="event-time" style="display:flex; align-items:center;">
+            <div class="event-time">
                 <span>${appt.start} - ${appt.end}</span>
                 ${videoIcon}
             </div>
             <div class="event-title">${appt.patient}</div>
             <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
+            <div class="resize-handle resize-handle-top"></div>
+            <div class="resize-handle resize-handle-bottom"></div>
         `;
 
+        // Drag events
+        card.addEventListener('dragstart', (e) => {
+            draggedAppointment = appt;
+            card.style.opacity = '0.5';
+            e.dataTransfer.effectAllowed = 'move';
+        });
+
+        card.addEventListener('dragend', (e) => {
+            card.style.opacity = '1';
+            draggedAppointment = null;
+        });
+
         card.addEventListener('click', (e) => {
+            if (e.target.classList.contains('resize-handle')) return;
             e.stopPropagation();
             openModalForEdit(appt);
         });
@@ -334,10 +355,183 @@ function renderEvents() {
                 });
             }
         }
+
+        // Add resize handlers
+        setupResizeHandlers(card, appt);
     });
 
     // Re-create all Lucide icons once after all events are rendered
     lucide.createIcons();
+}
+
+// Setup drag and drop on day columns
+function initDragAndDrop() {
+    document.querySelectorAll('.day-col').forEach((col, dayIndex) => {
+        col.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        col.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            if (!draggedAppointment) return;
+
+            const rect = col.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const minutesFromStart = (y / hourHeight) * 60;
+            const totalMinutes = (startHour * 60) + minutesFromStart;
+
+            // Snap to 15-minute intervals
+            const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+            const newStartHour = Math.floor(snappedMinutes / 60);
+            const newStartMin = snappedMinutes % 60;
+
+            // Calculate duration
+            const oldStart = timeToMinutes(draggedAppointment.start);
+            const oldEnd = timeToMinutes(draggedAppointment.end);
+            const duration = oldEnd - oldStart;
+
+            // Calculate new end time
+            const newEndTotalMin = snappedMinutes + duration;
+            const newEndHour = Math.floor(newEndTotalMin / 60);
+            const newEndMin = newEndTotalMin % 60;
+
+            // Update appointment
+            const dateForCol = new Date(currentWeekStart);
+            dateForCol.setDate(dateForCol.getDate() + dayIndex);
+
+            const startDateTime = new Date(dateForCol);
+            startDateTime.setHours(newStartHour, newStartMin, 0);
+
+            const endDateTime = new Date(dateForCol);
+            endDateTime.setHours(newEndHour, newEndMin, 0);
+
+            await updateAppointmentTime(draggedAppointment.id, startDateTime, endDateTime);
+        });
+    });
+}
+
+async function updateAppointmentTime(appointmentId, newStart, newEnd) {
+    const appt = appointments.find(a => a.id === appointmentId);
+    if (!appt) return;
+
+    const payload = {
+        start_time: newStart.toISOString(),
+        end_time: newEnd.toISOString(),
+        patient: appt.patient,
+        type: appt.type,
+        practitioner_id: appt.practitioner_id,
+        video_link: appt.video_link || null
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/appointments/${appointmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+        });
+
+        if (response.status === 409) {
+            alert("Denne tiden kolliderer med en annen avtale!");
+            return;
+        }
+
+        if (response.ok) {
+            await fetchAppointments();
+        } else {
+            const errorData = await response.json();
+            alert(`Feil: ${errorData.error || 'Ukjent feil'}`);
+        }
+    } catch (error) {
+        console.error("Feil ved oppdatering:", error);
+        alert("Kunne ikke oppdatere avtalen");
+    }
+}
+
+// Setup resize handlers for appointments
+function setupResizeHandlers(card, appt) {
+    const topHandle = card.querySelector('.resize-handle-top');
+    const bottomHandle = card.querySelector('.resize-handle-bottom');
+
+    let isResizing = false;
+    let resizeDirection = null;
+    let startY = 0;
+    let startHeight = 0;
+    let startTop = 0;
+
+    const startResize = (e, direction) => {
+        e.stopPropagation();
+        e.preventDefault();
+        isResizing = true;
+        resizeDirection = direction;
+        startY = e.clientY;
+        startHeight = card.offsetHeight;
+        startTop = card.offsetTop;
+        card.style.userSelect = 'none';
+        document.body.style.cursor = 'ns-resize';
+    };
+
+    const doResize = (e) => {
+        if (!isResizing) return;
+        e.preventDefault();
+
+        const deltaY = e.clientY - startY;
+
+        if (resizeDirection === 'bottom') {
+            const newHeight = Math.max(30, startHeight + deltaY);
+            card.style.height = newHeight + 'px';
+        } else if (resizeDirection === 'top') {
+            const newTop = startTop + deltaY;
+            const newHeight = startHeight - deltaY;
+            if (newHeight >= 30) {
+                card.style.top = newTop + 'px';
+                card.style.height = newHeight + 'px';
+            }
+        }
+    };
+
+    const stopResize = async (e) => {
+        if (!isResizing) return;
+        isResizing = false;
+        document.body.style.cursor = '';
+        card.style.userSelect = '';
+
+        // Calculate new times
+        const newTopPx = parseFloat(card.style.top);
+        const newHeightPx = parseFloat(card.style.height);
+
+        const startMinutesFromDayStart = (newTopPx / hourHeight) * 60;
+        const durationMinutes = (newHeightPx / hourHeight) * 60;
+
+        // Snap to 15-minute intervals
+        const snappedStart = Math.round(startMinutesFromDayStart / 15) * 15;
+        const snappedDuration = Math.max(15, Math.round(durationMinutes / 15) * 15);
+
+        const totalStartMinutes = (startHour * 60) + snappedStart;
+        const totalEndMinutes = totalStartMinutes + snappedDuration;
+
+        const newStartHour = Math.floor(totalStartMinutes / 60);
+        const newStartMin = totalStartMinutes % 60;
+        const newEndHour = Math.floor(totalEndMinutes / 60);
+        const newEndMin = totalEndMinutes % 60;
+
+        // Calculate date
+        const dateForAppt = new Date(appt.fullDate);
+        const startDateTime = new Date(dateForAppt);
+        startDateTime.setHours(newStartHour, newStartMin, 0);
+
+        const endDateTime = new Date(dateForAppt);
+        endDateTime.setHours(newEndHour, newEndMin, 0);
+
+        await updateAppointmentTime(appt.id, startDateTime, endDateTime);
+    };
+
+    topHandle.addEventListener('mousedown', (e) => startResize(e, 'top'));
+    bottomHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
 }
 
 // --- HJELPEFUNKSJONER ---
@@ -444,7 +638,7 @@ function openModalForEdit(appt) {
     // Set video link and show/hide field
     const videoLinkInput = document.getElementById('inputVideoLink');
     const videoLinkGroup = document.getElementById('videoLinkGroup');
-    if (appt.type === 'Videokonsultasjon') {
+    if (appt.type.includes('Videokonsultasjon')) {
         videoLinkInput.value = appt.video_link || '';
         videoLinkGroup.style.display = 'block';
     } else {
@@ -648,7 +842,7 @@ async function loadVideoConsultations() {
 
         // Filter only video consultations
         const videoConsultations = allAppointments
-            .filter(appt => appt.type === 'Videokonsultasjon' && appt.video_link)
+            .filter(appt => appt.type.includes('Videokonsultasjon') && appt.video_link)
             .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
 
         if (videoConsultations.length === 0) {

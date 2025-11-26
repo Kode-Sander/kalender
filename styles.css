@@ -205,7 +205,7 @@ header {
 .outline-btn {
     background: white;
     border: 1px solid var(--border);
-    padding: 6px 12px;
+    padding: 8px 12px;
     border-radius: 4px;
     font-weight: 500;
     cursor: pointer;
@@ -215,6 +215,8 @@ header {
     font-size: 13px;
     transition: all var(--transition-fast);
     color: var(--text-main);
+    height: 32px;
+    line-height: 1;
 }
 .outline-btn:hover {
     background: var(--bg-sidebar);
@@ -311,20 +313,45 @@ header {
     padding: 6px 8px;
     font-size: 12px;
     z-index: 10;
-    cursor: pointer;
+    cursor: move;
     box-shadow: var(--shadow-sm);
-    transition: all var(--transition-fast);
+    transition: box-shadow var(--transition-fast);
     overflow: hidden;
+    user-select: none;
 }
 .event-card:hover {
-    transform: scale(1.02);
     box-shadow: var(--shadow-md);
     z-index: 15;
+}
+.event-card:active {
+    cursor: grabbing;
+}
+
+/* Resize handles */
+.resize-handle {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 20;
+}
+.resize-handle:hover {
+    background: rgba(0, 82, 204, 0.3);
+}
+.resize-handle-top {
+    top: 0;
+}
+.resize-handle-bottom {
+    bottom: 0;
 }
 .event-time {
     font-size: 10px;
     color: var(--text-muted);
     margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 .event-title {
     font-weight: 700;
