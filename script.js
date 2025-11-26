@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupCurrentTime();
     setInterval(setupCurrentTime, 60000);
 
-    // Vis/skjul videolenke-felt basert på type
+    // Vis/skjul videolenke-felt basert på type + auto-duration
     document.getElementById('inputType').addEventListener('change', function() {
         const videoGroup = document.getElementById('videoLinkGroup');
         if (this.value.includes('Videokonsultasjon')) {
@@ -48,6 +48,73 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             videoGroup.style.display = 'none';
             document.getElementById('inputVideoLink').value = '';
+        }
+
+        // Auto-duration basert på konsultasjonstype
+        const type = this.value;
+        const startTimeInput = document.getElementById('inputStart');
+        const endTimeInput = document.getElementById('inputEnd');
+
+        if (startTimeInput.value) {
+            let durationMinutes = 60; // Standard (Klinikk)
+
+            if (type === 'Videokonsultasjon') {
+                durationMinutes = 45;
+            } else if (type === 'Klinikk') {
+                durationMinutes = 60;
+            } else if (type === 'Sperring') {
+                durationMinutes = 60; // Standard for sperring også
+            }
+
+            // Beregn ny sluttid
+            const [hours, minutes] = startTimeInput.value.split(':').map(Number);
+            const startMinTotal = hours * 60 + minutes;
+            const endMinTotal = startMinTotal + durationMinutes;
+
+            const endHours = Math.floor(endMinTotal / 60);
+            const endMinutes = endMinTotal % 60;
+            const newEndTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+
+            endTimeInput.value = newEndTime;
+        }
+    });
+
+    // Show/hide repeat options
+    document.getElementById('enableRepeat').addEventListener('change', function() {
+        const repeatOptionsGroup = document.getElementById('repeatOptionsGroup');
+        if (this.checked) {
+            repeatOptionsGroup.style.display = 'block';
+        } else {
+            repeatOptionsGroup.style.display = 'none';
+        }
+    });
+
+    // Auto-duration når starttid endres
+    document.getElementById('inputStart').addEventListener('change', function() {
+        const type = document.getElementById('inputType').value;
+        const endTimeInput = document.getElementById('inputEnd');
+
+        if (this.value) {
+            let durationMinutes = 60; // Standard (Klinikk)
+
+            if (type === 'Videokonsultasjon') {
+                durationMinutes = 45;
+            } else if (type === 'Klinikk') {
+                durationMinutes = 60;
+            } else if (type === 'Sperring') {
+                durationMinutes = 60;
+            }
+
+            // Beregn ny sluttid
+            const [hours, minutes] = this.value.split(':').map(Number);
+            const startMinTotal = hours * 60 + minutes;
+            const endMinTotal = startMinTotal + durationMinutes;
+
+            const endHours = Math.floor(endMinTotal / 60);
+            const endMinutes = endMinTotal % 60;
+            const newEndTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+
+            endTimeInput.value = newEndTime;
         }
     });
 });
@@ -223,6 +290,12 @@ async function saveAppointment() {
         }
 
         if (response.ok) {
+            // Check if repeat is enabled (only for new appointments)
+            const enableRepeat = document.getElementById('enableRepeat').checked;
+            if (enableRepeat && !isUpdate) {
+                await createRepeatingAppointments(payload, dateForCol);
+            }
+
             fetchAppointments();
             closeModal();
         } else {
@@ -232,6 +305,62 @@ async function saveAppointment() {
     } catch (error) {
         console.error("Feil ved lagring:", error);
         alert("Kunne ikke lagre avtalen. Er serveren kjørende?");
+    }
+}
+
+// Create repeating appointments based on frequency and count
+async function createRepeatingAppointments(basePayload, startDate) {
+    const frequency = document.getElementById('repeatFrequency').value;
+    const count = parseInt(document.getElementById('repeatCount').value) || 1;
+
+    for (let i = 1; i < count; i++) {
+        const nextDate = new Date(startDate);
+
+        // Calculate next date based on frequency
+        switch (frequency) {
+            case 'daily':
+                nextDate.setDate(nextDate.getDate() + i);
+                break;
+            case 'weekly':
+                nextDate.setDate(nextDate.getDate() + (i * 7));
+                break;
+            case 'biweekly':
+                nextDate.setDate(nextDate.getDate() + (i * 14));
+                break;
+            case 'triweekly':
+                nextDate.setDate(nextDate.getDate() + (i * 21));
+                break;
+            case 'monthly':
+                nextDate.setMonth(nextDate.getMonth() + i);
+                break;
+        }
+
+        // Create new appointment with updated dates
+        const startTime = new Date(basePayload.start_time);
+        const endTime = new Date(basePayload.end_time);
+
+        const newStartTime = new Date(nextDate);
+        newStartTime.setHours(startTime.getHours(), startTime.getMinutes(), 0);
+
+        const newEndTime = new Date(nextDate);
+        newEndTime.setHours(endTime.getHours(), endTime.getMinutes(), 0);
+
+        const newPayload = {
+            ...basePayload,
+            start_time: newStartTime.toISOString(),
+            end_time: newEndTime.toISOString()
+        };
+
+        try {
+            await fetch(`${API_URL}/appointments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(newPayload)
+            });
+        } catch (error) {
+            console.error(`Feil ved opprettelse av repeterende avtale ${i}:`, error);
+        }
     }
 }
 
@@ -252,6 +381,23 @@ async function deleteAppointment() {
     } catch (error) {
         console.error("Feil ved sletting:", error);
     }
+}
+
+// Duplicate appointment for same patient
+function duplicateAppointment() {
+    // Keep patient, type, and practitioner
+    // But clear the ID to create a new appointment
+    inputId.value = '';
+
+    // Hide delete and "Ny time" buttons (since it's now a new appointment)
+    btnDelete.style.display = 'none';
+    btnNewAppointment.style.display = 'none';
+
+    // Update modal title
+    modalTitle.innerText = "Ny avtale (Samme pasient)";
+
+    // Keep the form open with the same data
+    // User can now change the time and save
 }
 
 // --- GRID RENDERING ---
@@ -290,8 +436,79 @@ function initGrid() {
     }
 }
 
+// Helper function to check if two appointments overlap in time
+function appointmentsOverlap(appt1, appt2) {
+    const start1 = timeToMinutes(appt1.start);
+    const end1 = timeToMinutes(appt1.end);
+    const start2 = timeToMinutes(appt2.start);
+    const end2 = timeToMinutes(appt2.end);
+
+    return start1 < end2 && start2 < end1;
+}
+
+// Helper function to calculate overlap positions for appointments in a day
+function calculateOverlapPositions(dayAppointments) {
+    const positions = new Map(); // appointmentId -> {left, width}
+    const clusters = []; // Array of arrays, each inner array is a cluster of overlapping appointments
+
+    // Sort appointments by start time
+    const sorted = [...dayAppointments].sort((a, b) => {
+        return timeToMinutes(a.start) - timeToMinutes(b.start);
+    });
+
+    // Build clusters of overlapping appointments
+    sorted.forEach(appt => {
+        let addedToCluster = false;
+
+        for (let cluster of clusters) {
+            // Check if this appointment overlaps with any in this cluster
+            if (cluster.some(clusteredAppt => appointmentsOverlap(appt, clusteredAppt))) {
+                cluster.push(appt);
+                addedToCluster = true;
+                break;
+            }
+        }
+
+        if (!addedToCluster) {
+            clusters.push([appt]);
+        }
+    });
+
+    // Calculate positions for each cluster
+    clusters.forEach(cluster => {
+        const clusterSize = cluster.length;
+
+        cluster.forEach((appt, index) => {
+            const widthPercent = 100 / clusterSize;
+            const leftPercent = (100 / clusterSize) * index;
+
+            positions.set(appt.id, {
+                left: leftPercent,
+                width: widthPercent
+            });
+        });
+    });
+
+    return positions;
+}
+
 function renderEvents() {
     document.querySelectorAll('.event-card').forEach(e => e.remove());
+
+    // Group appointments by day for overlap detection
+    const appointmentsByDay = {};
+    appointments.forEach(appt => {
+        if (!appointmentsByDay[appt.day]) {
+            appointmentsByDay[appt.day] = [];
+        }
+        appointmentsByDay[appt.day].push(appt);
+    });
+
+    // Calculate overlap positions for each day
+    const overlapPositions = {};
+    for (let day in appointmentsByDay) {
+        overlapPositions[day] = calculateOverlapPositions(appointmentsByDay[day]);
+    }
 
     appointments.forEach(appt => {
         const col = document.getElementById(`day-${appt.day}`);
@@ -303,27 +520,53 @@ function renderEvents() {
         const duration = endMin - startMin;
 
         const card = document.createElement('div');
-        card.className = 'event-card';
+
+        // ALLE avtaler er oransje! (Sperring får egen klasse)
+        let cardClass = 'event-card type-orange';
+        if (appt.type === 'Sperring') {
+            cardClass = 'event-card type-blocked';
+        }
+
+        card.className = cardClass;
         card.style.top = (startOffset / 60 * hourHeight) + 'px';
         card.style.height = (duration / 60 * hourHeight) + 'px';
         card.dataset.appointmentId = appt.id;
 
-        const videoIcon = appt.video_link
-            ? `<i data-lucide="video" size="12" style="color:#0052cc; cursor:pointer;"></i>`
+        // Apply overlap positioning if necessary
+        const position = overlapPositions[appt.day]?.get(appt.id);
+        if (position) {
+            card.style.left = position.left + '%';
+            card.style.width = position.width + '%';
+            // Remove the default left/right from CSS
+            card.style.right = 'auto';
+        }
+
+        // Video-ikon i øvre høyre hjørne (UTENFOR event-inner)
+        const videoIcon = appt.type.includes('Videokonsultasjon')
+            ? `<div class="video-badge"><i data-lucide="video" size="14"></i></div>`
             : '';
 
-        card.innerHTML = `
-            <div class="event-inner">
-                <div class="event-time">
-                    <span>${appt.start} - ${appt.end}</span>
-                    ${videoIcon}
+        // Sperring har spesiell visning
+        if (appt.type === 'Sperring') {
+            card.innerHTML = `
+                <div class="resize-handle resize-handle-top"></div>
+                <div class="event-inner" style="justify-content:center; align-items:center;">
+                    <div style="font-weight:700; letter-spacing:1px; opacity:0.6;">SPERRET</div>
                 </div>
-                <div class="event-title">${appt.patient}</div>
-                <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
-            </div>
-            <div class="resize-handle resize-handle-top"></div>
-            <div class="resize-handle resize-handle-bottom"></div>
-        `;
+                <div class="resize-handle resize-handle-bottom"></div>
+            `;
+        } else {
+            card.innerHTML = `
+                <div class="resize-handle resize-handle-top"></div>
+                ${videoIcon}
+                <div class="event-inner">
+                    <span class="event-time">${appt.start} - ${appt.end}</span>
+                    <div class="event-title">${appt.patient}</div>
+                    <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
+                </div>
+                <div class="resize-handle resize-handle-bottom"></div>
+            `;
+        }
 
         // Click to edit
         card.addEventListener('click', (e) => {
@@ -660,8 +903,8 @@ function updateCardTimeDisplay(card, topPx, heightPx) {
     const newStartTime = minutesToTime(startMinTotal);
     const newEndTime = minutesToTime(endMinTotal);
 
-    // Update only the time text in the event-time span
-    const timeSpan = card.querySelector('.event-time span');
+    // FIX: event-time er nå selve span-en, ikke en wrapper
+    const timeSpan = card.querySelector('.event-time');
     if (timeSpan) {
         timeSpan.textContent = `${newStartTime} - ${newEndTime}`;
     }
@@ -702,6 +945,7 @@ const inputEnd = document.getElementById('inputEnd');
 const inputType = document.getElementById('inputType');
 const inputDayIndex = document.getElementById('inputDayIndex');
 const btnDelete = document.getElementById('btnDelete');
+const btnNewAppointment = document.getElementById('btnNewAppointment');
 const modalTitle = document.getElementById('modalTitle');
 
 function openModal() {
@@ -744,7 +988,13 @@ function handleGridClick(e, dayIndex) {
     document.getElementById('inputVideoLink').value = '';
     document.getElementById('videoLinkGroup').style.display = 'none';
 
+    // Reset repeat options
+    document.getElementById('enableRepeat').checked = false;
+    document.getElementById('repeatOptionsGroup').style.display = 'none';
+    document.getElementById('repeatCount').value = 4;
+
     btnDelete.style.display = 'none';
+    btnNewAppointment.style.display = 'none';
     modalTitle.innerText = "Ny avtale";
 
     openModal();
@@ -770,7 +1020,12 @@ function openModalForEdit(appt) {
         videoLinkGroup.style.display = 'none';
     }
 
+    // Hide repeat options for existing appointments
+    document.getElementById('enableRepeat').checked = false;
+    document.getElementById('repeatOptionsGroup').style.display = 'none';
+
     btnDelete.style.display = 'block';
+    btnNewAppointment.style.display = 'block';
     modalTitle.innerText = "Rediger avtale";
 
     openModal();

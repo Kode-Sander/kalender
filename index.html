@@ -281,6 +281,7 @@
                     <option value="Parterapi oppfølging (90 min)">Parterapi oppfølging (90 min)</option>
                     <option value="Videokonsultasjon (50 min)">Videokonsultasjon (50 min)</option>
                     <option value="Kortsamtale (25 min)">Kortsamtale (25 min)</option>
+                    <option value="Sperring">Sperring</option>
                 </select>
             </div>
 
@@ -289,11 +290,38 @@
                 <input type="url" id="inputVideoLink" class="form-input" placeholder="https://meet.google.com/...">
             </div>
 
+            <!-- Repeter Section -->
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="enableRepeat">
+                    <span>Repeter avtale</span>
+                </label>
+            </div>
+
+            <div id="repeatOptionsGroup" style="display:none;">
+                <div class="form-group">
+                    <label>Frekvens</label>
+                    <select id="repeatFrequency" class="form-input">
+                        <option value="daily">Daglig</option>
+                        <option value="weekly">Ukentlig</option>
+                        <option value="biweekly">Hver 2. uke</option>
+                        <option value="triweekly">Hver 3. uke</option>
+                        <option value="monthly">Månedlig</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Antall repetisjoner</label>
+                    <input type="number" id="repeatCount" class="form-input" min="1" max="52" value="4" placeholder="Antall ganger">
+                </div>
+            </div>
+
             <input type="hidden" id="inputDayIndex">
             <input type="hidden" id="inputId">
 
             <div class="modal-actions">
                 <button type="button" class="btn-danger" id="btnDelete" style="display:none;" onclick="deleteAppointment()">Slett</button>
+                <button type="button" class="btn-secondary" id="btnNewAppointment" style="display:none;" onclick="duplicateAppointment()">Ny time</button>
                 <button type="button" class="btn-secondary" onclick="closeModal()">Avbryt</button>
                 <button type="button" class="btn-primary" onclick="saveAppointment()">Lagre</button>
             </div>
