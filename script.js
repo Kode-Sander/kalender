@@ -585,3 +585,308 @@ function saveSettings() {
     fetchAppointments();
     toggleSettings(false);
 }
+
+// --- NAVIGATION SYSTEM ---
+function showSection(sectionName) {
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
+
+    // Show selected section
+    const section = document.getElementById(`section-${sectionName}`);
+    if (section) {
+        section.classList.add('active');
+    }
+
+    // Update sidebar active state
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    // Load section-specific data
+    if (sectionName === 'video-consultations') {
+        loadVideoConsultations();
+    } else if (sectionName === 'practitioner-settings') {
+        loadPractitionersGrid();
+    } else if (sectionName === 'user-settings') {
+        loadUserSettings();
+    } else if (sectionName === 'notification-settings') {
+        loadNotificationSettings();
+    }
+
+    // Re-create icons for new content
+    setTimeout(() => lucide.createIcons(), 10);
+}
+
+// --- VIDEO CONSULTATIONS ---
+async function loadVideoConsultations() {
+    const container = document.getElementById('upcomingVideoConsultations');
+
+    try {
+        // Fetch all appointments with video links
+        const now = new Date();
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 90); // Next 90 days
+
+        const response = await fetch(
+            `${API_URL}/appointments?start=${now.toISOString()}&end=${futureDate.toISOString()}`,
+            { credentials: 'include' }
+        );
+        const allAppointments = await response.json();
+
+        // Filter only video consultations
+        const videoConsultations = allAppointments
+            .filter(appt => appt.type === 'Videokonsultasjon' && appt.video_link)
+            .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+
+        if (videoConsultations.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted); font-size: 13px;">Ingen kommende videokonsultasjoner</p>';
+            return;
+        }
+
+        container.innerHTML = videoConsultations.map(appt => {
+            const startDate = new Date(appt.start_time);
+            const practitioner = practitioners.find(p => p.id === appt.practitioner_id);
+
+            return `
+                <div class="video-consultation-card">
+                    <div class="video-consultation-info">
+                        <h4>${appt.patient}</h4>
+                        <p>${startDate.toLocaleDateString('no-NO', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })} • ${practitioner ? practitioner.name : 'Ukjent'}</p>
+                    </div>
+                    <div class="video-consultation-actions">
+                        <button class="icon-btn" onclick="window.open('${appt.video_link}', '_blank')" title="Start videomøte">
+                            <i data-lucide="video" size="18"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        lucide.createIcons();
+    } catch (error) {
+        console.error('Error loading video consultations:', error);
+        container.innerHTML = '<p style="color: #ff5630;">Kunne ikke laste videokonsultasjoner</p>';
+    }
+}
+
+// --- USER SETTINGS ---
+function loadUserSettings() {
+    // Load user data from session
+    const userName = document.getElementById('userName')?.textContent || '';
+    const userEmail = document.querySelector('.user-details p')?.textContent || '';
+
+    document.getElementById('userNameSetting').value = userName;
+    document.getElementById('userEmailSetting').value = userEmail;
+
+    // Load from localStorage if available
+    const userPhone = localStorage.getItem('userPhone') || '';
+    document.getElementById('userPhoneSetting').value = userPhone;
+}
+
+function saveUserSettings() {
+    const name = document.getElementById('userNameSetting').value;
+    const phone = document.getElementById('userPhoneSetting').value;
+
+    // Save to localStorage
+    localStorage.setItem('userPhone', phone);
+
+    // Update sidebar display
+    const userNameDisplay = document.getElementById('userName');
+    if (userNameDisplay) {
+        userNameDisplay.textContent = name;
+    }
+
+    alert('Brukerinnstillinger lagret!');
+}
+
+function changePassword() {
+    const current = document.getElementById('currentPassword').value;
+    const newPass = document.getElementById('newPassword').value;
+    const confirm = document.getElementById('confirmPassword').value;
+
+    if (!current || !newPass || !confirm) {
+        alert('Vennligst fyll ut alle feltene');
+        return;
+    }
+
+    if (newPass !== confirm) {
+        alert('Nye passord stemmer ikke overens');
+        return;
+    }
+
+    if (newPass.length < 6) {
+        alert('Passord må være minst 6 tegn');
+        return;
+    }
+
+    // TODO: Implement password change API call
+    alert('Passordendring er ikke implementert ennå (backend kreves)');
+}
+
+// --- PRACTITIONER SETTINGS ---
+async function loadPractitionersGrid() {
+    const grid = document.getElementById('practitionersGrid');
+
+    if (practitioners.length === 0) {
+        grid.innerHTML = '<p style="color: var(--text-muted);">Ingen behandlere funnet</p>';
+        return;
+    }
+
+    grid.innerHTML = practitioners.map(p => `
+        <div class="practitioner-card" onclick="openEditPractitionerModal(${p.id})">
+            <div class="practitioner-card-header">
+                <div class="practitioner-color-badge" style="background: ${p.color};"></div>
+                <div class="practitioner-info">
+                    <h4>${p.name}</h4>
+                    <p>${p.role}</p>
+                </div>
+            </div>
+            ${p.username ? `<p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                <i data-lucide="user" size="12"></i> ${p.username}
+            </p>` : ''}
+        </div>
+    `).join('');
+
+    lucide.createIcons();
+}
+
+function openAddPractitionerModal() {
+    document.getElementById('practitionerModalTitle').textContent = 'Legg til behandler';
+    document.getElementById('practitionerId').value = '';
+    document.getElementById('practitionerName').value = '';
+    document.getElementById('practitionerRole').value = 'Psykolog';
+    document.getElementById('practitionerColor').value = '#e6effc';
+    document.getElementById('practitionerUsername').value = '';
+    document.getElementById('practitionerPassword').value = '';
+    document.getElementById('btnDeletePractitioner').style.display = 'none';
+
+    document.getElementById('practitionerModal').classList.add('open');
+    setTimeout(() => lucide.createIcons(), 10);
+}
+
+function openEditPractitionerModal(practitionerId) {
+    const practitioner = practitioners.find(p => p.id === practitionerId);
+    if (!practitioner) return;
+
+    document.getElementById('practitionerModalTitle').textContent = 'Rediger behandler';
+    document.getElementById('practitionerId').value = practitioner.id;
+    document.getElementById('practitionerName').value = practitioner.name;
+    document.getElementById('practitionerRole').value = practitioner.role;
+    document.getElementById('practitionerColor').value = practitioner.color;
+    document.getElementById('practitionerUsername').value = practitioner.username || '';
+    document.getElementById('practitionerPassword').value = '';
+    document.getElementById('btnDeletePractitioner').style.display = 'block';
+
+    document.getElementById('practitionerModal').classList.add('open');
+    setTimeout(() => lucide.createIcons(), 10);
+}
+
+function closePractitionerModal() {
+    document.getElementById('practitionerModal').classList.remove('open');
+}
+
+async function savePractitioner() {
+    const id = document.getElementById('practitionerId').value;
+    const name = document.getElementById('practitionerName').value;
+    const role = document.getElementById('practitionerRole').value;
+    const color = document.getElementById('practitionerColor').value;
+    const username = document.getElementById('practitionerUsername').value;
+    const password = document.getElementById('practitionerPassword').value;
+
+    if (!name || !role) {
+        alert('Navn og rolle er påkrevd');
+        return;
+    }
+
+    const payload = { name, role, color };
+    if (username) payload.username = username;
+    if (password) payload.password = password;
+
+    try {
+        const isUpdate = id && id !== '';
+        const url = isUpdate ? `${API_URL}/practitioners/${id}` : `${API_URL}/practitioners`;
+        const method = isUpdate ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            await fetchPractitioners();
+            loadPractitionersGrid();
+            closePractitionerModal();
+            alert('Behandler lagret!');
+        } else {
+            const errorData = await response.json();
+            alert(`Feil: ${errorData.error || 'Ukjent feil'}`);
+        }
+    } catch (error) {
+        console.error('Error saving practitioner:', error);
+        alert('Kunne ikke lagre behandler');
+    }
+}
+
+async function deletePractitioner() {
+    const id = document.getElementById('practitionerId').value;
+    if (!id) return;
+
+    if (!confirm('Er du sikker på at du vil slette denne behandleren?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/practitioners/${id}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            await fetchPractitioners();
+            loadPractitionersGrid();
+            closePractitionerModal();
+            alert('Behandler slettet');
+        } else {
+            const errorData = await response.json();
+            alert(`Feil: ${errorData.error || 'Ukjent feil'}`);
+        }
+    } catch (error) {
+        console.error('Error deleting practitioner:', error);
+        alert('Kunne ikke slette behandler');
+    }
+}
+
+// --- NOTIFICATION SETTINGS ---
+function loadNotificationSettings() {
+    // Load from localStorage
+    document.getElementById('emailNewAppt').checked = localStorage.getItem('emailNewAppt') !== 'false';
+    document.getElementById('emailCancelled').checked = localStorage.getItem('emailCancelled') !== 'false';
+    document.getElementById('emailReminder').checked = localStorage.getItem('emailReminder') !== 'false';
+    document.getElementById('smsNewAppt').checked = localStorage.getItem('smsNewAppt') === 'true';
+    document.getElementById('smsReminder').checked = localStorage.getItem('smsReminder') !== 'false';
+    document.getElementById('pushEnabled').checked = localStorage.getItem('pushEnabled') !== 'false';
+}
+
+function saveNotificationSettings() {
+    // Save to localStorage
+    localStorage.setItem('emailNewAppt', document.getElementById('emailNewAppt').checked);
+    localStorage.setItem('emailCancelled', document.getElementById('emailCancelled').checked);
+    localStorage.setItem('emailReminder', document.getElementById('emailReminder').checked);
+    localStorage.setItem('smsNewAppt', document.getElementById('smsNewAppt').checked);
+    localStorage.setItem('smsReminder', document.getElementById('smsReminder').checked);
+    localStorage.setItem('pushEnabled', document.getElementById('pushEnabled').checked);
+
+    alert('Varslingsinnstillinger lagret!');
+}

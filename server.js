@@ -181,6 +181,121 @@ app.get('/api/practitioners', (req, res) => {
     });
 });
 
+// Create new practitioner (Protected)
+app.post('/api/practitioners', isAuthenticated, async (req, res) => {
+    const { name, role, color, username, password } = req.body;
+
+    if (!name || !role) {
+        return res.status(400).json({ error: 'Name and role are required' });
+    }
+
+    try {
+        let hashedPassword = null;
+        if (password) {
+            hashedPassword = await bcrypt.hash(password, 10);
+        }
+
+        const sql = `INSERT INTO practitioners (name, role, color, username, password) VALUES (?, ?, ?, ?, ?)`;
+
+        db.run(sql, [name, role, color || '#e6effc', username || null, hashedPassword], function(err) {
+            if (err) {
+                console.error('Error creating practitioner:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+            res.status(201).json({
+                id: this.lastID,
+                name,
+                role,
+                color: color || '#e6effc',
+                username: username || null
+            });
+        });
+    } catch (error) {
+        console.error('Error hashing password:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update practitioner (Protected)
+app.put('/api/practitioners/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const { name, role, color, username, password } = req.body;
+
+    if (!name || !role) {
+        return res.status(400).json({ error: 'Name and role are required' });
+    }
+
+    try {
+        let sql, params;
+
+        if (password) {
+            // Update with new password
+            const hashedPassword = await bcrypt.hash(password, 10);
+            sql = `UPDATE practitioners SET name=?, role=?, color=?, username=?, password=? WHERE id=?`;
+            params = [name, role, color || '#e6effc', username || null, hashedPassword, id];
+        } else {
+            // Update without changing password
+            sql = `UPDATE practitioners SET name=?, role=?, color=?, username=? WHERE id=?`;
+            params = [name, role, color || '#e6effc', username || null, id];
+        }
+
+        db.run(sql, params, function(err) {
+            if (err) {
+                console.error('Error updating practitioner:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Practitioner not found' });
+            }
+
+            res.json({
+                id: parseInt(id),
+                name,
+                role,
+                color: color || '#e6effc',
+                username: username || null
+            });
+        });
+    } catch (error) {
+        console.error('Error updating practitioner:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete practitioner (Protected)
+app.delete('/api/practitioners/:id', isAuthenticated, (req, res) => {
+    const { id } = req.params;
+
+    // Check if practitioner has appointments
+    db.get("SELECT COUNT(*) as count FROM appointments WHERE practitioner_id = ?", [id], (err, row) => {
+        if (err) {
+            console.error('Error checking appointments:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+
+        if (row.count > 0) {
+            return res.status(409).json({
+                error: `Kan ikke slette behandler med ${row.count} eksisterende avtale(r)`
+            });
+        }
+
+        // Safe to delete
+        db.run("DELETE FROM practitioners WHERE id = ?", [id], function(err) {
+            if (err) {
+                console.error('Error deleting practitioner:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Practitioner not found' });
+            }
+
+            res.json({ message: 'Practitioner deleted successfully', id: parseInt(id) });
+        });
+    });
+});
+
 // 1. Get appointments for a specific period
 app.get('/api/appointments', (req, res) => {
     const { start, end, practitionerId } = req.query;
@@ -339,9 +454,13 @@ app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log('API endpoints:');
     console.log(`  GET    /api/practitioners`);
+    console.log(`  POST   /api/practitioners (Protected)`);
+    console.log(`  PUT    /api/practitioners/:id (Protected)`);
+    console.log(`  DELETE /api/practitioners/:id (Protected)`);
     console.log(`  GET    /api/appointments?start=<ISO>&end=<ISO>&practitionerId=<ID>`);
-    console.log(`  POST   /api/appointments`);
-    console.log(`  DELETE /api/appointments/:id`);
+    console.log(`  POST   /api/appointments (Protected)`);
+    console.log(`  PUT    /api/appointments/:id (Protected)`);
+    console.log(`  DELETE /api/appointments/:id (Protected)`);
 });
 
 // Graceful shutdown
