@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr.Dropin Kalender - Full Versjon</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <nav class="sidebar">
+        <div class="brand">
+            <i data-lucide="activity" color="#ff5630"></i>
+            <div>Dr.Dropin <br><span style="font-weight:400; font-size:12px; color:var(--text-muted)">Norway</span></div>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-title">Schedule</div>
+            <a href="#" class="nav-item active"><i data-lucide="calendar"></i> Calendar</a>
+            <a href="#" class="nav-item"><i data-lucide="video"></i> Video consultations</a>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-title">My Account</div>
+            <a href="#" class="nav-item"><i data-lucide="user"></i> User</a>
+            <a href="#" class="nav-item"><i data-lucide="briefcase"></i> Practitioner</a>
+            <a href="#" class="nav-item"><i data-lucide="bell"></i> Notification settings</a>
+        </div>
+
+        <div class="user-footer">
+            <div class="avatar"><img src="https://i.pravatar.cc/150?u=sander" alt="User"></div>
+            <div class="user-details">
+                <h4>Sander Rosøy</h4>
+                <p>sander.rosoy@drdropin.no</p>
+            </div>
+            <i data-lucide="chevrons-up-down" size="16" style="margin-left:auto; color:var(--text-muted)"></i>
+        </div>
+    </nav>
+
+    <main class="main">
+        <header>
+            <div class="top-bar">
+                <div class="location-pill">
+                    <i data-lucide="map-pin" size="14"></i>
+                    Berstadhuset: Valkendorfsgaten
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <div style="display:flex; align-items:center;">
+                    <div class="view-toggles">
+                        <button class="toggle-btn">Day</button>
+                        <button class="toggle-btn active">Week</button>
+                    </div>
+                    <div class="date-nav">
+                        <button class="nav-btn" onclick="changeWeek(-1)"><i data-lucide="chevron-left" size="16"></i></button>
+                        <span class="current-date-range">24.11 - 30.11 Nov 2025</span>
+                        <button class="nav-btn" onclick="changeWeek(1)"><i data-lucide="chevron-right" size="16"></i></button>
+                        <button class="outline-btn" onclick="goToToday()">Today</button>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button class="outline-btn"><i data-lucide="users" size="14"></i> Practitioners</button>
+                    <button class="outline-btn"><i data-lucide="settings" size="14"></i> Settings</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="calendar-container">
+            <div class="grid-header">
+                <div class="header-cell" style="border-bottom:none"></div>
+                <div class="header-cell">Mon <span class="day-num">24</span></div>
+                <div class="header-cell">Tue <span class="day-num">25</span></div>
+                <div class="header-cell active">Wed <span class="day-num">26</span></div>
+                <div class="header-cell">Thu <span class="day-num">27</span></div>
+                <div class="header-cell">Fri <span class="day-num">28</span></div>
+                <div class="header-cell">Sat <span class="day-num">29</span></div>
+                <div class="header-cell">Sun <span class="day-num">30</span></div>
+            </div>
+
+            <div class="grid-body" id="gridBody">
+                <div class="time-col" id="timeLabels"></div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal-overlay" id="appointmentModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modalTitle">Ny avtale</h3>
+                <button class="close-modal" onclick="closeModal()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="form-group">
+                <label>Pasient Navn</label>
+                <input type="text" id="inputPatient" class="form-input" placeholder="F.eks. Ola Nordmann">
+            </div>
+
+            <div class="row">
+                <div class="form-group" style="flex:1">
+                    <label>Start Tid</label>
+                    <input type="time" id="inputStart" class="form-input">
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label>Slutt Tid</label>
+                    <input type="time" id="inputEnd" class="form-input">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Type konsultasjon</label>
+                <select id="inputType" class="form-input">
+                    <option value="Psykolog i klinikk, oppfølging">Psykolog i klinikk, oppfølging</option>
+                    <option value="Psykolog i klinikk, første time">Psykolog i klinikk, første time</option>
+                    <option value="Videokonsultasjon">Videokonsultasjon</option>
+                </select>
+            </div>
+
+            <input type="hidden" id="inputDayIndex">
+            <input type="hidden" id="inputId">
+
+            <div class="modal-actions">
+                <button type="button" class="btn-danger" id="btnDelete" style="display:none;" onclick="deleteAppointment()">Slett</button>
+                <button type="button" class="btn-secondary" onclick="closeModal()">Avbryt</button>
+                <button type="button" class="btn-primary" onclick="saveAppointment()">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
