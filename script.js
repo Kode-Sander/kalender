@@ -413,24 +413,31 @@ async function updateAppointmentTime(appointmentId, newStart, newEnd) {
 }
 
 // Setup drag functionality with mousedown/mousemove
-function setupDraggable(card, appt, col) {
+function setupDraggable(card, appt, originalCol) {
     let isDragging = false;
     let startY = 0;
     let startX = 0;
     let initialTop = 0;
-    let currentColumn = col;
+    let currentCol = originalCol;
+    let hasMoved = false;
+
+    // 5 minutter = (60px / 60min) * 5min = 5px
+    const SNAP_PIXELS = (hourHeight / 60) * 5;
 
     card.addEventListener('mousedown', (e) => {
-        // Don't start drag if clicking on resize handle
         if (e.target.classList.contains('resize-handle')) return;
 
         isDragging = true;
         isDraggingGlobal = true;
+        hasMoved = false;
         startY = e.clientY;
         startX = e.clientX;
         initialTop = parseInt(card.style.top || 0);
 
-        card.style.zIndex = '100';
+        card.style.zIndex = '1000';
+        card.style.opacity = '0.9';
+        card.style.cursor = 'grabbing';
+
         e.stopPropagation();
         e.preventDefault();
     });
@@ -438,76 +445,85 @@ function setupDraggable(card, appt, col) {
     window.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
 
+        // Sjekk om vi har beveget musen nok til å kalle det et "drag"
+        if (Math.abs(e.clientY - startY) > 5 || Math.abs(e.clientX - startX) > 5) {
+            hasMoved = true;
+            card.dataset.wasDragged = 'true';
+        }
+
         const deltaY = e.clientY - startY;
-        const newTop = initialTop + deltaY;
-        card.style.top = `${Math.max(0, newTop)}px`;
+        let rawTop = initialTop + deltaY;
 
-        // Update time display in real-time
-        const currentHeight = parseInt(card.style.height || 0);
-        updateCardTimeDisplay(card, Math.max(0, newTop), currentHeight);
+        // --- SNAP TIL 5 MIN - skaper "hakkingen" ---
+        let snappedTop = Math.round(rawTop / SNAP_PIXELS) * SNAP_PIXELS;
 
-        // Check which column the mouse is over
+        // Hold innenfor grensene
+        const maxTop = (endHour - startHour) * hourHeight - parseInt(card.style.height);
+        snappedTop = Math.max(0, Math.min(snappedTop, maxTop));
+
+        // Oppdater posisjonen med den "snappede" verdien
+        card.style.top = `${snappedTop}px`;
+
+        // Sjekk om vi bytter kolonne (dag)
         card.style.visibility = 'hidden';
-        const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+        const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
         card.style.visibility = 'visible';
 
-        if (elementBelow) {
-            const newCol = elementBelow.closest('.day-col');
-            if (newCol && newCol !== currentColumn) {
-                // Move card to new column
-                currentColumn = newCol;
-                newCol.appendChild(card);
+        if (elemBelow) {
+            const hoverCol = elemBelow.closest('.day-col');
+            if (hoverCol && hoverCol !== currentCol) {
+                hoverCol.appendChild(card);
+                currentCol = hoverCol;
             }
         }
+
+        // Oppdater teksten med "hakkete" tid (09:00, 09:05, 09:10...)
+        updateCardTimeDisplay(card, snappedTop, parseInt(card.style.height));
     });
 
     window.addEventListener('mouseup', async (e) => {
         if (!isDragging) return;
+
         isDragging = false;
-        isDraggingGlobal = false;
+        setTimeout(() => { isDraggingGlobal = false; }, 100);
+
         card.style.zIndex = '';
+        card.style.opacity = '';
+        card.style.cursor = 'grab';
 
-        // Mark card as dragged to prevent modal from opening
-        card.dataset.wasDragged = 'true';
+        if (hasMoved) {
+            const currentTop = parseInt(card.style.top || 0);
 
-        // Snap to 15 minute intervals
-        const snapInterval = (hourHeight / 60) * 15; // 15 minutes in pixels
-        const currentTop = parseInt(card.style.top || 0);
-        const snappedTop = Math.round(currentTop / snapInterval) * snapInterval;
+            // Finn ny dag
+            const newDayIndex = parseInt(currentCol.id.replace('day-', ''));
 
-        card.style.top = `${snappedTop}px`;
+            // Beregn ny tid
+            const minutesFromStart = (currentTop / hourHeight) * 60;
+            const totalStartMin = (startHour * 60) + minutesFromStart;
 
-        // Find which day column we're in
-        const colId = currentColumn.id;
-        const newDayIndex = parseInt(colId.replace('day-', ''));
+            // Behold varighet
+            const oldStart = timeToMinutes(appt.start);
+            const oldEnd = timeToMinutes(appt.end);
+            const durationMin = oldEnd - oldStart;
+            const totalEndMin = totalStartMin + durationMin;
 
-        // Calculate new time
-        const minutesFromStart = (snappedTop / hourHeight) * 60;
-        const totalStartMinutes = (startHour * 60) + minutesFromStart;
+            const newStartHour = Math.floor(totalStartMin / 60);
+            const newStartMin = totalStartMin % 60;
+            const newEndHour = Math.floor(totalEndMin / 60);
+            const newEndMin = totalEndMin % 60;
 
-        // Calculate duration
-        const oldStart = timeToMinutes(appt.start);
-        const oldEnd = timeToMinutes(appt.end);
-        const durationMin = oldEnd - oldStart;
+            // Beregn dato for ny dag
+            const dateForNewDay = new Date(currentWeekStart);
+            dateForNewDay.setDate(currentWeekStart.getDate() + newDayIndex);
 
-        const totalEndMinutes = totalStartMinutes + durationMin;
+            const startDateTime = new Date(dateForNewDay);
+            startDateTime.setHours(newStartHour, newStartMin, 0);
 
-        const newStartHour = Math.floor(totalStartMinutes / 60);
-        const newStartMin = totalStartMinutes % 60;
-        const newEndHour = Math.floor(totalEndMinutes / 60);
-        const newEndMin = totalEndMinutes % 60;
+            const endDateTime = new Date(dateForNewDay);
+            endDateTime.setHours(newEndHour, newEndMin, 0);
 
-        // Calculate the date for the new day
-        const dateForNewDay = new Date(currentWeekStart);
-        dateForNewDay.setDate(currentWeekStart.getDate() + newDayIndex);
-
-        const startDateTime = new Date(dateForNewDay);
-        startDateTime.setHours(newStartHour, newStartMin, 0);
-
-        const endDateTime = new Date(dateForNewDay);
-        endDateTime.setHours(newEndHour, newEndMin, 0);
-
-        await updateAppointmentTime(appt.id, startDateTime, endDateTime);
+            await updateAppointmentTime(appt.id, startDateTime, endDateTime);
+        }
     });
 }
 
@@ -522,6 +538,9 @@ function setupResizable(card, appt) {
     let initialHeight = 0;
     let initialTop = 0;
 
+    // 5 minutter snap
+    const SNAP_PIXELS = (hourHeight / 60) * 5;
+
     const startResize = (e, direction) => {
         isResizing = true;
         isResizingGlobal = true;
@@ -529,6 +548,8 @@ function setupResizable(card, appt) {
         startY = e.clientY;
         initialHeight = parseInt(card.style.height || 0);
         initialTop = parseInt(card.style.top || 0);
+
+        card.dataset.wasResized = 'true';
 
         e.stopPropagation();
         e.preventDefault();
@@ -542,54 +563,56 @@ function setupResizable(card, appt) {
         const deltaY = e.clientY - startY;
 
         if (resizeDirection === 'bottom') {
-            const newHeight = Math.max(30, initialHeight + deltaY);
-            card.style.height = `${newHeight}px`;
+            let rawHeight = initialHeight + deltaY;
 
-            // Update time display in real-time
+            // --- SNAP TIL 5 MIN - skaper "hakkingen" ---
+            let snappedHeight = Math.round(rawHeight / SNAP_PIXELS) * SNAP_PIXELS;
+
+            // Sørg for minst 5 minutter høyde
+            snappedHeight = Math.max(SNAP_PIXELS, snappedHeight);
+
+            // Oppdater høyden med "snappet" verdi
+            card.style.height = `${snappedHeight}px`;
+
+            // Oppdater teksten i sanntid
             const currentTop = parseInt(card.style.top || 0);
-            updateCardTimeDisplay(card, currentTop, newHeight);
+            updateCardTimeDisplay(card, currentTop, snappedHeight);
         } else if (resizeDirection === 'top') {
-            const newTop = initialTop + deltaY;
-            const newHeight = initialHeight - deltaY;
-            if (newHeight >= 30) {
-                card.style.top = `${newTop}px`;
-                card.style.height = `${newHeight}px`;
+            let rawTop = initialTop + deltaY;
+            let rawHeight = initialHeight - deltaY;
 
-                // Update time display in real-time
-                updateCardTimeDisplay(card, newTop, newHeight);
+            // --- SNAP TIL 5 MIN for både top og height ---
+            let snappedTop = Math.round(rawTop / SNAP_PIXELS) * SNAP_PIXELS;
+            let snappedHeight = Math.round(rawHeight / SNAP_PIXELS) * SNAP_PIXELS;
+
+            // Sørg for minst 5 minutter høyde
+            if (snappedHeight >= SNAP_PIXELS) {
+                card.style.top = `${snappedTop}px`;
+                card.style.height = `${snappedHeight}px`;
+
+                // Oppdater teksten i sanntid
+                updateCardTimeDisplay(card, snappedTop, snappedHeight);
             }
         }
     };
 
     const stopResize = async (e) => {
         if (!isResizing) return;
-        isResizing = false;
-        isResizingGlobal = false;
-        document.body.style.cursor = '';
 
         // Stop event propagation to prevent grid click
         e.stopPropagation();
 
-        // Mark card as resized to prevent modal from opening
-        card.dataset.wasResized = 'true';
+        isResizing = false;
+        setTimeout(() => { isResizingGlobal = false; }, 100);
+        document.body.style.cursor = '';
 
-        // Snap to 15 minute intervals
-        const snapInterval = (hourHeight / 60) * 15;
+        // Verdiene er allerede snappet fra mousemove
         const currentTop = parseInt(card.style.top || 0);
         const currentHeight = parseInt(card.style.height || 0);
 
-        const snappedTop = Math.round(currentTop / snapInterval) * snapInterval;
-        const snappedHeight = Math.max(snapInterval, Math.round(currentHeight / snapInterval) * snapInterval);
-
-        card.style.top = `${snappedTop}px`;
-        card.style.height = `${snappedHeight}px`;
-
-        // Update display with snapped values
-        updateCardTimeDisplay(card, snappedTop, snappedHeight);
-
-        // Calculate new times
-        const startMinutesFromDayStart = (snappedTop / hourHeight) * 60;
-        const durationMinutes = (snappedHeight / hourHeight) * 60;
+        // Beregn nye tider
+        const startMinutesFromDayStart = (currentTop / hourHeight) * 60;
+        const durationMinutes = (currentHeight / hourHeight) * 60;
 
         const totalStartMinutes = (startHour * 60) + startMinutesFromDayStart;
         const totalEndMinutes = totalStartMinutes + durationMinutes;
@@ -599,7 +622,7 @@ function setupResizable(card, appt) {
         const newEndHour = Math.floor(totalEndMinutes / 60);
         const newEndMin = totalEndMinutes % 60;
 
-        // Update appointment
+        // Oppdater avtale i database
         const dateForAppt = new Date(appt.fullDate);
         const startDateTime = new Date(dateForAppt);
         startDateTime.setHours(newStartHour, newStartMin, 0);
