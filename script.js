@@ -303,25 +303,35 @@ function renderEvents() {
         const duration = endMin - startMin;
 
         const card = document.createElement('div');
-        card.className = 'event-card';
+
+        // Bestem type-klasse basert på avtaletypen
+        let typeClass = 'type-orange'; // Default: Avdelingens oransje farge
+        if (appt.type.includes('Videokonsultasjon')) {
+            typeClass = 'type-video';
+        } else if (appt.type.includes('klinikk')) {
+            typeClass = 'type-clinic';
+        }
+
+        card.className = `event-card ${typeClass}`;
         card.style.top = (startOffset / 60 * hourHeight) + 'px';
         card.style.height = (duration / 60 * hourHeight) + 'px';
         card.dataset.appointmentId = appt.id;
 
-        const videoIcon = appt.video_link
-            ? `<i data-lucide="video" size="12" style="color:#0052cc; cursor:pointer;"></i>`
-            : '';
+        // Velg ikon basert på type
+        const icon = appt.type.includes('Videokonsultasjon')
+            ? `<i data-lucide="video" class="event-icon"></i>`
+            : `<i data-lucide="user" class="event-icon"></i>`;
 
         card.innerHTML = `
+            <div class="resize-handle resize-handle-top"></div>
             <div class="event-inner">
-                <div class="event-time">
-                    <span>${appt.start} - ${appt.end}</span>
-                    ${videoIcon}
+                <div class="event-header">
+                    <span class="event-time">${appt.start} - ${appt.end}</span>
+                    ${icon}
                 </div>
                 <div class="event-title">${appt.patient}</div>
                 <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
             </div>
-            <div class="resize-handle resize-handle-top"></div>
             <div class="resize-handle resize-handle-bottom"></div>
         `;
 
