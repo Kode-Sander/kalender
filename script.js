@@ -11,7 +11,23 @@ let practitioners = [];
 let currentWeekStart = getStartOfWeek(new Date());
 
 // --- INITIALISERING ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Sjekk autentisering først
+    try {
+        const sessionCheck = await fetch(`${API_URL}/session`, { credentials: 'include' });
+        const sessionData = await sessionCheck.json();
+
+        if (!sessionData.authenticated) {
+            // Ikke logget inn, redirect til login
+            window.location.href = '/login.html';
+            return;
+        }
+    } catch (error) {
+        console.error('Session check failed:', error);
+        window.location.href = '/login.html';
+        return;
+    }
+
     lucide.createIcons();
     initGrid();
     updateHeaderDates();
@@ -73,7 +89,7 @@ function goToToday() {
 // --- API CALLS ---
 async function fetchPractitioners() {
     try {
-        const response = await fetch(`${API_URL}/practitioners`);
+        const response = await fetch(`${API_URL}/practitioners`, { credentials: 'include' });
         practitioners = await response.json();
 
         // Populate main dropdown
@@ -108,7 +124,7 @@ async function fetchAppointments() {
     const practitionerId = document.getElementById('practitionerSelect')?.value || 'all';
 
     try {
-        const response = await fetch(`${API_URL}/appointments?start=${startStr}&end=${endStr}&practitionerId=${practitionerId}`);
+        const response = await fetch(`${API_URL}/appointments?start=${startStr}&end=${endStr}&practitionerId=${practitionerId}`, { credentials: 'include' });
         const data = await response.json();
 
         appointments = data.map(appt => {
@@ -142,6 +158,7 @@ async function fetchAppointments() {
 }
 
 async function saveAppointment() {
+    const appointmentId = document.getElementById('inputId').value;
     const dayIndex = parseInt(document.getElementById('inputDayIndex').value);
     const dateForCol = new Date(currentWeekStart);
     dateForCol.setDate(dateForCol.getDate() + dayIndex);
@@ -174,9 +191,15 @@ async function saveAppointment() {
     };
 
     try {
-        const response = await fetch(`${API_URL}/appointments`, {
-            method: 'POST',
+        // Use PUT for update, POST for create
+        const isUpdate = appointmentId && appointmentId !== '';
+        const url = isUpdate ? `${API_URL}/appointments/${appointmentId}` : `${API_URL}/appointments`;
+        const method = isUpdate ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(payload)
         });
 
@@ -188,6 +211,9 @@ async function saveAppointment() {
         if (response.ok) {
             fetchAppointments();
             closeModal();
+        } else {
+            const errorData = await response.json();
+            alert(`Feil: ${errorData.error || 'Ukjent feil'}`);
         }
     } catch (error) {
         console.error("Feil ved lagring:", error);
@@ -201,7 +227,8 @@ async function deleteAppointment() {
 
     try {
         const response = await fetch(`${API_URL}/appointments/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'
         });
 
         if (response.ok) {
@@ -279,7 +306,14 @@ function renderEvents() {
             <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
         `;
 
-        // Add click handler for video icon
+        card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openModalForEdit(appt);
+        });
+
+        col.appendChild(card);
+
+        // Add click handler for video icon after appending to DOM
         if (appt.video_link) {
             const videoIconEl = card.querySelector('[data-lucide="video"]');
             if (videoIconEl) {
@@ -289,17 +323,10 @@ function renderEvents() {
                 });
             }
         }
-
-        // Re-create icons after adding to DOM
-        setTimeout(() => lucide.createIcons(), 0);
-
-        card.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openModalForEdit(appt);
-        });
-
-        col.appendChild(card);
     });
+
+    // Re-create all Lucide icons once after all events are rendered
+    lucide.createIcons();
 }
 
 // --- HJELPEFUNKSJONER ---
@@ -423,6 +450,23 @@ function openModalForEdit(appt) {
 modal.addEventListener('click', (e) => {
     if (e.target === modal) closeModal();
 });
+
+// --- AUTHENTICATION ---
+async function logout() {
+    try {
+        const response = await fetch(`${API_URL}/logout`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            window.location.href = '/login.html';
+        }
+    } catch (error) {
+        console.error('Logout failed:', error);
+        alert('Kunne ikke logge ut. Prøv igjen.');
+    }
+}
 
 // --- SETTINGS ---
 function toggleSettings(show) {

@@ -84,14 +84,21 @@ db.run(`ALTER TABLE practitioners ADD COLUMN username TEXT`, (err) => {
 });
 
 db.run(`ALTER TABLE practitioners ADD COLUMN password TEXT`, (err) => {
-    if (!err) {
-        console.log("Added password column to practitioners.");
-        // Create default admin user with hashed password
+    // Always try to set up default users, regardless of whether column was just added
+    setTimeout(() => {
         const hash = bcrypt.hashSync('passord123', 10);
-        db.run(`UPDATE practitioners SET username='admin', password=? WHERE id=1`, [hash], (updateErr) => {
-            if (!updateErr) console.log("Created default admin user (username: admin, password: passord123)");
+
+        // Check if first practitioner needs credentials
+        db.get("SELECT username FROM practitioners WHERE id=1", [], (checkErr, row) => {
+            if (!checkErr && row && !row.username) {
+                db.run(`UPDATE practitioners SET username='admin', password=? WHERE id=1`, [hash], (updateErr) => {
+                    if (!updateErr) console.log("Created default admin user (username: admin, password: passord123)");
+                });
+            }
         });
-    }
+
+        if (!err) console.log("Added password column to practitioners.");
+    }, 100);
 });
 
 // Middleware for authentication
@@ -237,6 +244,57 @@ app.post('/api/appointments', isAuthenticated, (req, res) => {
             }
             res.status(201).json({
                 id: this.lastID,
+                start_time,
+                end_time,
+                patient,
+                type,
+                practitioner_id,
+                video_link
+            });
+        });
+    });
+});
+
+// 2b. Update appointment (Protected)
+app.put('/api/appointments/:id', isAuthenticated, (req, res) => {
+    const { id } = req.params;
+    const { start_time, end_time, patient, type, practitioner_id, video_link } = req.body;
+
+    if (!start_time || !end_time || !patient || !type) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Check for collision: exclude current appointment from check
+    const checkSql = `
+        SELECT id FROM appointments
+        WHERE start_time < ? AND end_time > ? AND practitioner_id = ? AND id != ?
+    `;
+
+    db.get(checkSql, [end_time, start_time, practitioner_id, id], (err, row) => {
+        if (err) {
+            console.error('Error checking collision:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+
+        if (row) {
+            return res.status(409).json({ error: "Tidspunktet er opptatt for denne behandleren." });
+        }
+
+        // Update appointment
+        const updateSql = `UPDATE appointments SET start_time=?, end_time=?, patient=?, type=?, practitioner_id=?, video_link=? WHERE id=?`;
+
+        db.run(updateSql, [start_time, end_time, patient, type, practitioner_id, video_link, id], function(err) {
+            if (err) {
+                console.error('Error updating appointment:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Appointment not found' });
+            }
+
+            res.json({
+                id: parseInt(id),
                 start_time,
                 end_time,
                 patient,
