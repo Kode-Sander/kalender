@@ -1,11 +1,12 @@
 // --- KONFIGURASJON ---
 const API_URL = 'http://localhost:3000/api';
-const startHour = 7;
-const endHour = 17;
+let startHour = 7;  // Endret fra const til let for settings
+let endHour = 17;   // Endret fra const til let for settings
 const hourHeight = 60;
 
 // Globale variabler
 let appointments = [];
+let practitioners = [];
 let currentWeekStart = getStartOfWeek(new Date());
 
 // --- INITIALISERING ---
@@ -13,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
     initGrid();
     updateHeaderDates();
+    fetchPractitioners();
     fetchAppointments();
     setupCurrentTime();
     setInterval(setupCurrentTime, 60000);
@@ -57,14 +59,44 @@ function goToToday() {
 }
 
 // --- API CALLS ---
+async function fetchPractitioners() {
+    try {
+        const response = await fetch(`${API_URL}/practitioners`);
+        practitioners = await response.json();
+
+        // Populate main dropdown
+        const select = document.getElementById('practitionerSelect');
+        practitioners.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.id;
+            option.textContent = p.name;
+            select.appendChild(option);
+        });
+
+        // Populate appointment modal dropdown
+        const modalSelect = document.getElementById('inputPractitioner');
+        practitioners.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.id;
+            option.textContent = `${p.name} (${p.role})`;
+            modalSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Feil ved henting av behandlere:", error);
+    }
+}
+
 async function fetchAppointments() {
     const startStr = currentWeekStart.toISOString();
     const endOfWeek = new Date(currentWeekStart);
     endOfWeek.setDate(endOfWeek.getDate() + 7);
     const endStr = endOfWeek.toISOString();
 
+    // Get selected practitioner ID
+    const practitionerId = document.getElementById('practitionerSelect')?.value || 'all';
+
     try {
-        const response = await fetch(`${API_URL}/appointments?start=${startStr}&end=${endStr}`);
+        const response = await fetch(`${API_URL}/appointments?start=${startStr}&end=${endStr}&practitionerId=${practitionerId}`);
         const data = await response.json();
 
         appointments = data.map(appt => {
@@ -74,6 +106,9 @@ async function fetchAppointments() {
             let dayIndex = startDate.getDay() - 1;
             if (dayIndex === -1) dayIndex = 6;
 
+            // Find practitioner name
+            const practitioner = practitioners.find(p => p.id === appt.practitioner_id);
+
             return {
                 id: appt.id,
                 day: dayIndex,
@@ -81,6 +116,8 @@ async function fetchAppointments() {
                 end: endDate.toLocaleTimeString('no-NO', {hour:'2-digit', minute:'2-digit'}),
                 patient: appt.patient,
                 type: appt.type,
+                practitioner_id: appt.practitioner_id,
+                practitioner_name: practitioner ? practitioner.name : 'Ukjent',
                 fullDate: startDate
             };
         });
@@ -98,6 +135,13 @@ async function saveAppointment() {
 
     const startInput = document.getElementById('inputStart').value;
     const endInput = document.getElementById('inputEnd').value;
+    const practitionerId = document.getElementById('inputPractitioner').value;
+
+    // Validate practitioner selection
+    if (!practitionerId) {
+        alert("Vennligst velg en behandler!");
+        return;
+    }
 
     const [sH, sM] = startInput.split(':');
     const startDateTime = new Date(dateForCol);
@@ -111,7 +155,8 @@ async function saveAppointment() {
         start_time: startDateTime.toISOString(),
         end_time: endDateTime.toISOString(),
         patient: document.getElementById('inputPatient').value,
-        type: document.getElementById('inputType').value
+        type: document.getElementById('inputType').value,
+        practitioner_id: practitionerId
     };
 
     try {
@@ -210,7 +255,7 @@ function renderEvents() {
         card.innerHTML = `
             <div class="event-time">${appt.start} - ${appt.end}</div>
             <div class="event-title">${appt.patient}</div>
-            <div class="event-sub">Sander</div>
+            <div class="event-sub">${appt.practitioner_name || 'Ukjent'}</div>
         `;
 
         card.addEventListener('click', (e) => {
@@ -295,6 +340,15 @@ function handleGridClick(e, dayIndex) {
     inputDayIndex.value = dayIndex;
     inputType.selectedIndex = 0;
 
+    // Set practitioner from filter or reset
+    const selectedPractitioner = document.getElementById('practitionerSelect').value;
+    const practitionerInput = document.getElementById('inputPractitioner');
+    if (selectedPractitioner && selectedPractitioner !== 'all') {
+        practitionerInput.value = selectedPractitioner;
+    } else {
+        practitionerInput.value = '';
+    }
+
     btnDelete.style.display = 'none';
     modalTitle.innerText = "Ny avtale";
 
@@ -308,6 +362,7 @@ function openModalForEdit(appt) {
     inputEnd.value = appt.end;
     inputDayIndex.value = appt.day;
     inputType.value = appt.type;
+    document.getElementById('inputPractitioner').value = appt.practitioner_id || '';
 
     btnDelete.style.display = 'block';
     modalTitle.innerText = "Rediger avtale";
@@ -318,3 +373,40 @@ function openModalForEdit(appt) {
 modal.addEventListener('click', (e) => {
     if (e.target === modal) closeModal();
 });
+
+// --- SETTINGS ---
+function toggleSettings(show) {
+    const settingsModal = document.getElementById('settingsModal');
+    if (show) {
+        // Fill in current values
+        document.getElementById('settingStartHour').value = startHour;
+        document.getElementById('settingEndHour').value = endHour;
+        settingsModal.classList.add('open');
+        // Re-create icons for the close button
+        setTimeout(() => lucide.createIcons(), 10);
+    } else {
+        settingsModal.classList.remove('open');
+    }
+}
+
+function saveSettings() {
+    const newStart = parseInt(document.getElementById('settingStartHour').value);
+    const newEnd = parseInt(document.getElementById('settingEndHour').value);
+
+    if (newStart >= newEnd) {
+        alert("Starttid må være før sluttid!");
+        return;
+    }
+
+    startHour = newStart;
+    endHour = newEnd;
+
+    // Clear and rebuild grid
+    document.getElementById('timeLabels').innerHTML = '';
+    document.querySelectorAll('.day-col').forEach(col => col.remove());
+
+    // Re-initialize grid and fetch appointments
+    initGrid();
+    fetchAppointments();
+    toggleSettings(false);
+}
