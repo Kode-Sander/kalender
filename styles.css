@@ -308,7 +308,7 @@ header {
     color: #94a3b8;
     font-size: 11px;
     font-weight: 500;
-    transform: translateY(-50%);
+    transform: translateY(-8px);
 }
 
 /* Day Columns */
