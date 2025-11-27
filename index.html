@@ -290,29 +290,39 @@
                 <input type="url" id="inputVideoLink" class="form-input" placeholder="https://meet.google.com/...">
             </div>
 
-            <!-- Repeter Section -->
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="enableRepeat">
-                    <span>Repeter avtale</span>
-                </label>
-            </div>
-
-            <div id="repeatOptionsGroup" style="display:none;">
-                <div class="form-group">
-                    <label>Frekvens</label>
-                    <select id="repeatFrequency" class="form-input">
-                        <option value="daily">Daglig</option>
-                        <option value="weekly">Ukentlig</option>
-                        <option value="biweekly">Hver 2. uke</option>
-                        <option value="triweekly">Hver 3. uke</option>
-                        <option value="monthly">Månedlig</option>
-                    </select>
+            <!-- Repeter Section (Avansert) -->
+            <div class="form-group" style="border-top: 1px solid var(--border); margin-top: 20px; padding-top: 15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <label style="margin:0;">Repeter avtale</label>
+                    <input type="checkbox" id="checkRepeat" onchange="toggleRepeatOptions()">
                 </div>
 
-                <div class="form-group">
-                    <label>Antall repetisjoner</label>
-                    <input type="number" id="repeatCount" class="form-input" min="1" max="52" value="4" placeholder="Antall ganger">
+                <div id="repeatOptions" style="display:none; background: #f8fafc; padding: 10px; border-radius: 6px;">
+
+                    <div class="form-group">
+                        <label>Hvor ofte?</label>
+                        <select id="repeatFreq" class="form-input" onchange="toggleWeekdaySelector()">
+                            <option value="weekly">Ukentlig</option>
+                            <option value="daily">Daglig</option>
+                            <option value="monthly">Månedlig</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="repeatDaysGroup">
+                        <label>Velg dager:</label>
+                        <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <label class="day-checkbox"><input type="checkbox" value="0"> Man</label>
+                            <label class="day-checkbox"><input type="checkbox" value="1"> Tir</label>
+                            <label class="day-checkbox"><input type="checkbox" value="2"> Ons</label>
+                            <label class="day-checkbox"><input type="checkbox" value="3"> Tor</label>
+                            <label class="day-checkbox"><input type="checkbox" value="4"> Fre</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Repeter frem til:</label>
+                        <input type="date" id="repeatEndDate" class="form-input">
+                    </div>
                 </div>
             </div>
 

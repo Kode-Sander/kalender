@@ -85,15 +85,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Show/hide repeat options
-    document.getElementById('enableRepeat').addEventListener('change', function() {
-        const repeatOptionsGroup = document.getElementById('repeatOptionsGroup');
-        if (this.checked) {
-            repeatOptionsGroup.style.display = 'block';
-        } else {
-            repeatOptionsGroup.style.display = 'none';
-        }
-    });
+    // Note: toggleRepeatOptions() is now called from HTML onclick
+    // No need for event listener here anymore
 
     // Auto-duration når starttid endres
     document.getElementById('inputStart').addEventListener('change', function() {
@@ -297,9 +290,9 @@ async function saveAppointment() {
 
         if (response.ok) {
             // Check if repeat is enabled (only for new appointments)
-            const enableRepeat = document.getElementById('enableRepeat').checked;
-            if (enableRepeat && !isUpdate) {
-                await createRepeatingAppointments(payload, dateForCol);
+            const checkRepeat = document.getElementById('checkRepeat')?.checked;
+            if (checkRepeat && !isUpdate) {
+                await createRepeatingAppointments(payload, dateForCol, startInput, endInput, practitionerId);
             }
 
             fetchAppointments();
@@ -314,59 +307,92 @@ async function saveAppointment() {
     }
 }
 
-// Create repeating appointments based on frequency and count
-async function createRepeatingAppointments(basePayload, startDate) {
-    const frequency = document.getElementById('repeatFrequency').value;
-    const count = parseInt(document.getElementById('repeatCount').value) || 1;
+// Create repeating appointments with advanced weekday selection
+async function createRepeatingAppointments(basePayload, startDate, startTime, endTime, practitionerId) {
+    const frequency = document.getElementById('repeatFreq').value;
+    const endDateStr = document.getElementById('repeatEndDate').value;
 
-    for (let i = 1; i < count; i++) {
-        const nextDate = new Date(startDate);
+    if (!endDateStr) {
+        alert("Du må velge en sluttdato for repetisjonen.");
+        return;
+    }
 
-        // Calculate next date based on frequency
-        switch (frequency) {
-            case 'daily':
-                nextDate.setDate(nextDate.getDate() + i);
-                break;
-            case 'weekly':
-                nextDate.setDate(nextDate.getDate() + (i * 7));
-                break;
-            case 'biweekly':
-                nextDate.setDate(nextDate.getDate() + (i * 14));
-                break;
-            case 'triweekly':
-                nextDate.setDate(nextDate.getDate() + (i * 21));
-                break;
-            case 'monthly':
-                nextDate.setMonth(nextDate.getMonth() + i);
-                break;
+    const repeatEndDate = new Date(endDateStr);
+    repeatEndDate.setHours(23, 59, 59);
+
+    // Find selected weekdays for weekly repeats
+    const selectedDays = [];
+    if (frequency === 'weekly') {
+        document.querySelectorAll('#repeatDaysGroup input[type="checkbox"]:checked').forEach(cb => {
+            selectedDays.push(parseInt(cb.value)); // 0 = Mon, 1 = Tue, etc.
+        });
+        if (selectedDays.length === 0) {
+            alert("Du må velge minst én ukedag å repetere på.");
+            return;
+        }
+    }
+
+    // Loop through dates and create appointments
+    let loopDate = new Date(startDate);
+    loopDate.setDate(loopDate.getDate() + 1); // Start from next day
+
+    let createdCount = 0;
+
+    while (loopDate <= repeatEndDate) {
+        let shouldCreate = false;
+
+        if (frequency === 'daily') {
+            shouldCreate = true;
+        } else if (frequency === 'weekly') {
+            // Check if this weekday is selected
+            let jsDay = loopDate.getDay(); // 0=Sun, 1=Mon...
+            let ourDay = jsDay === 0 ? 6 : jsDay - 1; // Convert to 0=Mon, 6=Sun
+
+            if (selectedDays.includes(ourDay)) {
+                shouldCreate = true;
+            }
+        } else if (frequency === 'monthly') {
+            // Repeat on same day of month
+            if (loopDate.getDate() === startDate.getDate()) {
+                shouldCreate = true;
+            }
         }
 
-        // Create new appointment with updated dates
-        const startTime = new Date(basePayload.start_time);
-        const endTime = new Date(basePayload.end_time);
+        if (shouldCreate) {
+            // Create appointment
+            const [sH, sM] = startTime.split(':');
+            const newStartTime = new Date(loopDate);
+            newStartTime.setHours(sH, sM, 0);
 
-        const newStartTime = new Date(nextDate);
-        newStartTime.setHours(startTime.getHours(), startTime.getMinutes(), 0);
+            const [eH, eM] = endTime.split(':');
+            const newEndTime = new Date(loopDate);
+            newEndTime.setHours(eH, eM, 0);
 
-        const newEndTime = new Date(nextDate);
-        newEndTime.setHours(endTime.getHours(), endTime.getMinutes(), 0);
+            const newPayload = {
+                ...basePayload,
+                start_time: newStartTime.toISOString(),
+                end_time: newEndTime.toISOString()
+            };
 
-        const newPayload = {
-            ...basePayload,
-            start_time: newStartTime.toISOString(),
-            end_time: newEndTime.toISOString()
-        };
-
-        try {
-            await fetch(`${API_URL}/appointments`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(newPayload)
-            });
-        } catch (error) {
-            console.error(`Feil ved opprettelse av repeterende avtale ${i}:`, error);
+            try {
+                await fetch(`${API_URL}/appointments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(newPayload)
+                });
+                createdCount++;
+            } catch (error) {
+                console.error(`Feil ved opprettelse av repeterende avtale:`, error);
+            }
         }
+
+        // Move to next day
+        loopDate.setDate(loopDate.getDate() + 1);
+    }
+
+    if (createdCount > 0) {
+        alert(`Opprettet ${createdCount} repeterende avtaler frem til ${endDateStr}!`);
     }
 }
 
@@ -996,9 +1022,11 @@ function handleGridClick(e, dayIndex) {
     document.getElementById('videoLinkGroup').style.display = 'none';
 
     // Reset repeat options
-    document.getElementById('enableRepeat').checked = false;
-    document.getElementById('repeatOptionsGroup').style.display = 'none';
-    document.getElementById('repeatCount').value = 4;
+    document.getElementById('checkRepeat').checked = false;
+    document.getElementById('repeatOptions').style.display = 'none';
+    document.getElementById('repeatEndDate').value = '';
+    // Uncheck all weekday checkboxes
+    document.querySelectorAll('#repeatDaysGroup input[type="checkbox"]').forEach(cb => cb.checked = false);
 
     btnDelete.style.display = 'none';
     btnNewAppointment.style.display = 'none';
@@ -1028,8 +1056,8 @@ function openModalForEdit(appt) {
     }
 
     // Hide repeat options for existing appointments
-    document.getElementById('enableRepeat').checked = false;
-    document.getElementById('repeatOptionsGroup').style.display = 'none';
+    document.getElementById('checkRepeat').checked = false;
+    document.getElementById('repeatOptions').style.display = 'none';
 
     btnDelete.style.display = 'block';
     btnNewAppointment.style.display = 'block';
@@ -1526,4 +1554,32 @@ function saveWorkHours() {
 
     closeUserProfile();
     alert('Arbeidstid lagret!');
+}
+
+// --- REPEAT/RECURRING APPOINTMENTS TOGGLE FUNCTIONS ---
+function toggleRepeatOptions() {
+    const isChecked = document.getElementById('checkRepeat').checked;
+    document.getElementById('repeatOptions').style.display = isChecked ? 'block' : 'none';
+
+    // Set default end date (1 month ahead) if empty
+    const dateInput = document.getElementById('repeatEndDate');
+    if (isChecked && !dateInput.value) {
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        dateInput.value = nextMonth.toISOString().split('T')[0];
+    }
+
+    // Show/hide weekday selector based on frequency
+    toggleWeekdaySelector();
+}
+
+function toggleWeekdaySelector() {
+    const frequency = document.getElementById('repeatFreq').value;
+    const weekdayGroup = document.getElementById('repeatDaysGroup');
+
+    if (frequency === 'weekly') {
+        weekdayGroup.style.display = 'block';
+    } else {
+        weekdayGroup.style.display = 'none';
+    }
 }

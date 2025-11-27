@@ -599,6 +599,27 @@ header {
     gap: 12px;
 }
 
+/* Styling for weekday selector (repeat function) */
+.day-checkbox {
+    background: white;
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+.day-checkbox:hover {
+    background: #f1f5f9;
+}
+.day-checkbox input {
+    cursor: pointer;
+}
+
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .btn-primary {
     background: var(--primary);
