@@ -2,14 +2,29 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const path = require('path');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const PORT = 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000',
+    credentials: true
+}));
 app.use(express.json());
 app.use(express.static(__dirname)); // Serve static files (HTML, CSS, JS)
+app.use(session({
+    secret: 'super-hemmelig-nokkel-endre-dette-i-produksjon',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false, // Set to true if using HTTPS
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
 
 // Database setup
 const db = new sqlite3.Database('./calendar.db', (err) => {
@@ -58,7 +73,102 @@ db.run(`ALTER TABLE appointments ADD COLUMN practitioner_id INTEGER`, (err) => {
     if (!err) console.log("Added practitioner_id column to appointments.");
 });
 
+// Add video_link column to appointments if it doesn't exist
+db.run(`ALTER TABLE appointments ADD COLUMN video_link TEXT`, (err) => {
+    if (!err) console.log("Added video_link column to appointments.");
+});
+
+// Add username and password columns to practitioners if they don't exist
+db.run(`ALTER TABLE practitioners ADD COLUMN username TEXT`, (err) => {
+    if (!err) console.log("Added username column to practitioners.");
+});
+
+db.run(`ALTER TABLE practitioners ADD COLUMN password TEXT`, (err) => {
+    // Always try to set up default users, regardless of whether column was just added
+    setTimeout(() => {
+        const hash = bcrypt.hashSync('passord123', 10);
+
+        // Check if first practitioner needs credentials
+        db.get("SELECT username FROM practitioners WHERE id=1", [], (checkErr, row) => {
+            if (!checkErr && row && !row.username) {
+                db.run(`UPDATE practitioners SET username='admin', password=? WHERE id=1`, [hash], (updateErr) => {
+                    if (!updateErr) console.log("Created default admin user (username: admin, password: passord123)");
+                });
+            }
+        });
+
+        if (!err) console.log("Added password column to practitioners.");
+    }, 100);
+});
+
+// Middleware for authentication
+function isAuthenticated(req, res, next) {
+    if (req.session.userId) {
+        return next();
+    }
+    res.status(401).json({ error: 'Unauthorized' });
+}
+
 // API Routes
+
+// Login route
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    db.get("SELECT * FROM practitioners WHERE username = ?", [username], async (err, user) => {
+        if (err) {
+            console.error('Error finding user:', err.message);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        if (!user) {
+            return res.status(401).json({ error: 'Feil brukernavn' });
+        }
+
+        try {
+            const match = await bcrypt.compare(password, user.password);
+            if (match) {
+                req.session.userId = user.id;
+                req.session.userName = user.name;
+                res.json({
+                    message: 'Logget inn',
+                    user: { id: user.id, name: user.name, role: user.role }
+                });
+            } else {
+                res.status(401).json({ error: 'Feil passord' });
+            }
+        } catch (compareErr) {
+            console.error('Error comparing passwords:', compareErr);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+});
+
+// Logout route
+app.post('/api/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Could not log out' });
+        }
+        res.json({ message: 'Logget ut' });
+    });
+});
+
+// Check session route
+app.get('/api/session', (req, res) => {
+    if (req.session.userId) {
+        res.json({
+            authenticated: true,
+            user: { id: req.session.userId, name: req.session.userName }
+        });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
 
 // Get all practitioners
 app.get('/api/practitioners', (req, res) => {
@@ -68,6 +178,121 @@ app.get('/api/practitioners', (req, res) => {
             return res.status(500).json({ error: err.message });
         }
         res.json(rows);
+    });
+});
+
+// Create new practitioner (Protected)
+app.post('/api/practitioners', isAuthenticated, async (req, res) => {
+    const { name, role, color, username, password } = req.body;
+
+    if (!name || !role) {
+        return res.status(400).json({ error: 'Name and role are required' });
+    }
+
+    try {
+        let hashedPassword = null;
+        if (password) {
+            hashedPassword = await bcrypt.hash(password, 10);
+        }
+
+        const sql = `INSERT INTO practitioners (name, role, color, username, password) VALUES (?, ?, ?, ?, ?)`;
+
+        db.run(sql, [name, role, color || '#e6effc', username || null, hashedPassword], function(err) {
+            if (err) {
+                console.error('Error creating practitioner:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+            res.status(201).json({
+                id: this.lastID,
+                name,
+                role,
+                color: color || '#e6effc',
+                username: username || null
+            });
+        });
+    } catch (error) {
+        console.error('Error hashing password:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update practitioner (Protected)
+app.put('/api/practitioners/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const { name, role, color, username, password } = req.body;
+
+    if (!name || !role) {
+        return res.status(400).json({ error: 'Name and role are required' });
+    }
+
+    try {
+        let sql, params;
+
+        if (password) {
+            // Update with new password
+            const hashedPassword = await bcrypt.hash(password, 10);
+            sql = `UPDATE practitioners SET name=?, role=?, color=?, username=?, password=? WHERE id=?`;
+            params = [name, role, color || '#e6effc', username || null, hashedPassword, id];
+        } else {
+            // Update without changing password
+            sql = `UPDATE practitioners SET name=?, role=?, color=?, username=? WHERE id=?`;
+            params = [name, role, color || '#e6effc', username || null, id];
+        }
+
+        db.run(sql, params, function(err) {
+            if (err) {
+                console.error('Error updating practitioner:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Practitioner not found' });
+            }
+
+            res.json({
+                id: parseInt(id),
+                name,
+                role,
+                color: color || '#e6effc',
+                username: username || null
+            });
+        });
+    } catch (error) {
+        console.error('Error updating practitioner:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete practitioner (Protected)
+app.delete('/api/practitioners/:id', isAuthenticated, (req, res) => {
+    const { id } = req.params;
+
+    // Check if practitioner has appointments
+    db.get("SELECT COUNT(*) as count FROM appointments WHERE practitioner_id = ?", [id], (err, row) => {
+        if (err) {
+            console.error('Error checking appointments:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+
+        if (row.count > 0) {
+            return res.status(409).json({
+                error: `Kan ikke slette behandler med ${row.count} eksisterende avtale(r)`
+            });
+        }
+
+        // Safe to delete
+        db.run("DELETE FROM practitioners WHERE id = ?", [id], function(err) {
+            if (err) {
+                console.error('Error deleting practitioner:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Practitioner not found' });
+            }
+
+            res.json({ message: 'Practitioner deleted successfully', id: parseInt(id) });
+        });
     });
 });
 
@@ -99,9 +324,9 @@ app.get('/api/appointments', (req, res) => {
     });
 });
 
-// 2. Create new appointment with collision check
-app.post('/api/appointments', (req, res) => {
-    const { start_time, end_time, patient, type, practitioner_id } = req.body;
+// 2. Create new appointment with collision check (Protected)
+app.post('/api/appointments', isAuthenticated, (req, res) => {
+    const { start_time, end_time, patient, type, practitioner_id, video_link } = req.body;
 
     if (!start_time || !end_time || !patient || !type) {
         return res.status(400).json({ error: 'All fields are required' });
@@ -125,9 +350,9 @@ app.post('/api/appointments', (req, res) => {
         }
 
         // No collision, insert appointment
-        const insertSql = `INSERT INTO appointments (start_time, end_time, patient, type, practitioner_id) VALUES (?, ?, ?, ?, ?)`;
+        const insertSql = `INSERT INTO appointments (start_time, end_time, patient, type, practitioner_id, video_link) VALUES (?, ?, ?, ?, ?, ?)`;
 
-        db.run(insertSql, [start_time, end_time, patient, type, practitioner_id], function(err) {
+        db.run(insertSql, [start_time, end_time, patient, type, practitioner_id, video_link], function(err) {
             if (err) {
                 console.error('Error inserting appointment:', err.message);
                 return res.status(500).json({ error: err.message });
@@ -138,14 +363,66 @@ app.post('/api/appointments', (req, res) => {
                 end_time,
                 patient,
                 type,
-                practitioner_id
+                practitioner_id,
+                video_link
             });
         });
     });
 });
 
-// 3. Delete appointment
-app.delete('/api/appointments/:id', (req, res) => {
+// 2b. Update appointment (Protected)
+app.put('/api/appointments/:id', isAuthenticated, (req, res) => {
+    const { id } = req.params;
+    const { start_time, end_time, patient, type, practitioner_id, video_link } = req.body;
+
+    if (!start_time || !end_time || !patient || !type) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Check for collision: exclude current appointment from check
+    const checkSql = `
+        SELECT id FROM appointments
+        WHERE start_time < ? AND end_time > ? AND practitioner_id = ? AND id != ?
+    `;
+
+    db.get(checkSql, [end_time, start_time, practitioner_id, id], (err, row) => {
+        if (err) {
+            console.error('Error checking collision:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+
+        if (row) {
+            return res.status(409).json({ error: "Tidspunktet er opptatt for denne behandleren." });
+        }
+
+        // Update appointment
+        const updateSql = `UPDATE appointments SET start_time=?, end_time=?, patient=?, type=?, practitioner_id=?, video_link=? WHERE id=?`;
+
+        db.run(updateSql, [start_time, end_time, patient, type, practitioner_id, video_link, id], function(err) {
+            if (err) {
+                console.error('Error updating appointment:', err.message);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Appointment not found' });
+            }
+
+            res.json({
+                id: parseInt(id),
+                start_time,
+                end_time,
+                patient,
+                type,
+                practitioner_id,
+                video_link
+            });
+        });
+    });
+});
+
+// 3. Delete appointment (Protected)
+app.delete('/api/appointments/:id', isAuthenticated, (req, res) => {
     const { id } = req.params;
 
     const sql = "DELETE FROM appointments WHERE id = ?";
@@ -164,8 +441,11 @@ app.delete('/api/appointments/:id', (req, res) => {
     });
 });
 
-// Serve index.html for root path
+// Serve index.html for root path (with authentication check)
 app.get('/', (req, res) => {
+    if (!req.session.userId) {
+        return res.sendFile(path.join(__dirname, 'login.html'));
+    }
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
@@ -174,9 +454,13 @@ app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log('API endpoints:');
     console.log(`  GET    /api/practitioners`);
+    console.log(`  POST   /api/practitioners (Protected)`);
+    console.log(`  PUT    /api/practitioners/:id (Protected)`);
+    console.log(`  DELETE /api/practitioners/:id (Protected)`);
     console.log(`  GET    /api/appointments?start=<ISO>&end=<ISO>&practitionerId=<ID>`);
-    console.log(`  POST   /api/appointments`);
-    console.log(`  DELETE /api/appointments/:id`);
+    console.log(`  POST   /api/appointments (Protected)`);
+    console.log(`  PUT    /api/appointments/:id (Protected)`);
+    console.log(`  DELETE /api/appointments/:id (Protected)`);
 });
 
 // Graceful shutdown
